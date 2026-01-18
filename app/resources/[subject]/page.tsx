@@ -108,6 +108,7 @@ export default function SubjectResourcesPage({ params }: { params: Promise<{ sub
 
                 </div>
                 <div style={{ marginTop: '50px' }}>
+                    {subject === 'JavaWeb_Resource' && (
                     <Link
                             href={`http://10.199.10.10`}
                             target="_blank"
@@ -137,7 +138,7 @@ export default function SubjectResourcesPage({ params }: { params: Promise<{ sub
                                 </p>
                             </div>
                             </Link>
-
+                    )}
                         </div>
 
                 {/* Empty State */}
