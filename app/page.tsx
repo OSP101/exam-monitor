@@ -1,65 +1,192 @@
-import Image from "next/image";
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { FolderLock, Clock } from 'lucide-react';
+import useSWR from 'swr';
+
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function Home() {
+  const { data: config, error } = useSWR('/api/config', fetcher);
+  const router = useRouter();
+
+  const [selectedSubject, setSelectedSubject] = useState<any>(null);
+  const [pin, setPin] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const handleSubjectClick = (subject: any) => {
+    setSelectedSubject(subject);
+    setPin('');
+    setErrorMsg('');
+  };
+
+  const handlePinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pin === selectedSubject.pin) {
+      sessionStorage.setItem(`access_${selectedSubject.folder}`, 'true');
+      router.push(`/resources/${selectedSubject.folder}`);
+    } else {
+      setErrorMsg('รหัสวิชาไม่ถูกต้อง');
+      setPin('');
+    }
+  };
+
+  if (error) return <div style={{ padding: '32px', color: '#dc2626' }}>Failed to load</div>;
+  if (!config) return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: '48px', height: '48px', border: '4px solid #3b82f6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div style={{ minHeight: '100vh', padding: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      {/* Header */}
+      <div style={{ width: '100%', maxWidth: '900px', marginBottom: '40px', textAlign: 'center' }}>
+        <h1 style={{ fontSize: '36px', fontWeight: 'bold', color: '#1e40af', marginBottom: '8px' }}>
+          {config.examTitle}
+        </h1>
+        <p style={{ fontSize: '20px', color: '#475569' }}>
+          เลือกรายวิชาที่ต้องการเข้าดูเอกสาร
+        </p>
+      </div>
+
+      {/* Subject Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', width: '100%', maxWidth: '900px' }}>
+        {config.subjects?.map((subject: any) => (
+          <button
+            key={subject.id}
+            onClick={() => handleSubjectClick(subject)}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              padding: '40px 24px',
+              backgroundColor: 'rgba(255,255,255,0.9)',
+              border: '2px solid #bfdbfe',
+              borderRadius: '20px',
+              cursor: 'pointer',
+              textAlign: 'center',
+              boxShadow: '0 8px 30px rgba(59,130,246,0.15)',
+              transition: 'all 0.2s'
+            }}
+            onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.borderColor = '#3b82f6'; }}
+            onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = '#bfdbfe'; }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <div style={{ padding: '16px', backgroundColor: '#dbeafe', borderRadius: '16px', marginBottom: '16px' }}>
+              <FolderLock style={{ width: '48px', height: '48px', color: '#2563eb' }} />
+            </div>
+            <h3 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e40af', marginBottom: '8px' }}>{subject.name}</h3>
+            <p style={{ fontSize: '16px', color: '#64748b' }}>คลิกเพื่อใส่รหัสวิชา</p>
+          </button>
+        ))}
+      </div>
+
+      {/* Timer Link */}
+      {/* <a
+        href="/time"
+        style={{
+          marginTop: '48px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          padding: '16px 32px',
+          backgroundColor: '#f0f9ff',
+          border: '2px solid #bae6fd',
+          borderRadius: '12px',
+          color: '#0369a1',
+          fontWeight: 'bold',
+          fontSize: '18px',
+          textDecoration: 'none'
+        }}
+      >
+        <Clock style={{ width: '24px', height: '24px' }} />
+        หน้าจอแสดงเวลาสอบ (สำหรับโปรเจกเตอร์)
+      </a> */}
+
+      {/* PIN Modal */}
+      {selectedSubject && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px',
+          zIndex: 100
+        }}>
+          <div style={{
+            width: '100%',
+            maxWidth: '400px',
+            backgroundColor: 'white',
+            borderRadius: '20px',
+            padding: '32px',
+            boxShadow: '0 25px 50px rgba(0,0,0,0.25)'
+          }}>
+            <h3 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e40af', marginBottom: '8px' }}>กรอกรหัสวิชา</h3>
+            <p style={{ color: '#64748b', marginBottom: '24px' }}>วิชา: {selectedSubject.name}</p>
+
+            <form onSubmit={handlePinSubmit}>
+              <input
+                type="password"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                placeholder="รหัสวิชา"
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  border: '2px solid #bfdbfe',
+                  borderRadius: '12px',
+                  textAlign: 'center',
+                  fontSize: '24px',
+                  fontWeight: 'bold',
+                  color: '#1e40af',
+                  marginBottom: '16px',
+                  outline: 'none'
+                }}
+                autoFocus
+              />
+              {errorMsg && <p style={{ color: '#dc2626', textAlign: 'center', marginBottom: '16px' }}>{errorMsg}</p>}
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSubject(null)}
+                  style={{
+                    flex: 1,
+                    padding: '14px',
+                    backgroundColor: '#f1f5f9',
+                    border: 'none',
+                    borderRadius: '12px',
+                    color: '#475569',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    flex: 1,
+                    padding: '14px',
+                    background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+                    border: 'none',
+                    borderRadius: '12px',
+                    color: 'white',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ยืนยัน
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-      </main>
+      )}
     </div>
   );
 }
