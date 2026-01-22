@@ -1,15 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { Settings, Lock, Unlock, Shield, Megaphone } from 'lucide-react';
+import { Settings, Lock, Unlock, Shield, Megaphone, ArrowLeft } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export default function TimePage() {
+export default function TimePage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = use(params);
     // Real-time sync: refresh every 3 seconds
-    const { data: config } = useSWR('/api/config', fetcher, { refreshInterval: 3000 });
+    const { data: config } = useSWR(`/api/exams/${id}`, fetcher, { refreshInterval: 3000 });
 
     const [isLocked, setIsLocked] = useState(true);
     const [pin, setPin] = useState('');
@@ -101,6 +102,15 @@ export default function TimePage() {
         );
     }
 
+    if (config.error) {
+        return (
+            <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px' }}>
+                <h1 style={{ color: '#ef4444', marginBottom: '16px' }}>ไม่พบรอบการสอบนี้</h1>
+                <Link href="/" style={{ color: '#3b82f6', fontWeight: 'bold' }}>กลับหน้าแรก</Link>
+            </div>
+        );
+    }
+
     // Lock Screen
     if (isLocked) {
         return (
@@ -110,62 +120,44 @@ export default function TimePage() {
                     maxWidth: '420px',
                     backgroundColor: 'rgba(255,255,255,0.9)',
                     borderRadius: '24px',
-                    padding: '48px',
+                    padding: '40px',
                     boxShadow: '0 25px 50px rgba(59,130,246,0.2)',
                     border: '2px solid #bfdbfe'
                 }}>
-                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '32px' }}>
-                        <div style={{ padding: '24px', borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', boxShadow: '0 10px 30px rgba(59,130,246,0.4)' }}>
-                            <Shield style={{ width: '48px', height: '48px', color: 'white' }} />
+                    <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', textDecoration: 'none', marginBottom: '24px', fontSize: '14px' }}>
+                        <ArrowLeft style={{ width: '16px', height: '16px' }} /> กลับหน้าแรก
+                    </Link>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
+                        <div style={{ padding: '20px', borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', boxShadow: '0 10px 30px rgba(59,130,246,0.4)' }}>
+                            <Shield style={{ width: '40px', height: '40px', color: 'white' }} />
                         </div>
                     </div>
-                    <h1 style={{ fontSize: '28px', fontWeight: 'bold', textAlign: 'center', color: '#1e40af', marginBottom: '12px' }}>{config.examTitle}</h1>
-                    <p style={{ color: '#64748b', textAlign: 'center', marginBottom: '32px', fontSize: '18px' }}>กรุณาใส่รหัสเพื่อเปิดใช้งาน</p>
+                    <h1 style={{ fontSize: '24px', fontWeight: 'bold', textAlign: 'center', color: '#1e40af', marginBottom: '8px' }}>{config.examTitle}</h1>
+                    <p style={{ color: '#64748b', textAlign: 'center', marginBottom: '24px' }}>กรุณาใส่รหัสเพื่อเปิดหน้าจอเวลา</p>
 
                     <form onSubmit={handleUnlock}>
                         <input
                             type="password"
                             value={pin}
                             onChange={(e) => setPin(e.target.value)}
-                            placeholder="รหัสผ่าน"
+                            placeholder="รหัสผ่าน Admin"
                             style={{
-                                width: '100%',
-                                padding: '20px',
-                                backgroundColor: 'white',
-                                border: '3px solid #bfdbfe',
-                                borderRadius: '16px',
-                                textAlign: 'center',
-                                fontSize: '28px',
-                                fontWeight: 'bold',
-                                color: '#1e40af',
-                                marginBottom: '16px',
-                                outline: 'none'
+                                width: '100%', padding: '16px', backgroundColor: 'white', border: '3px solid #bfdbfe', borderRadius: '16px',
+                                textAlign: 'center', fontSize: '24px', fontWeight: 'bold', color: '#1e40af', marginBottom: '16px', outline: 'none'
                             }}
                             autoFocus
                         />
-                        {errorMsg && <p style={{ color: '#dc2626', textAlign: 'center', fontWeight: '600', marginBottom: '16px', fontSize: '18px' }}>{errorMsg}</p>}
+                        {errorMsg && <p style={{ color: '#dc2626', textAlign: 'center', fontWeight: '600', marginBottom: '16px' }}>{errorMsg}</p>}
                         <button
                             type="submit"
                             style={{
-                                width: '100%',
-                                padding: '20px',
-                                background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
-                                color: 'white',
-                                fontWeight: 'bold',
-                                fontSize: '22px',
-                                border: 'none',
-                                borderRadius: '16px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '12px',
-                                boxShadow: '0 10px 30px rgba(59,130,246,0.3)'
+                                width: '100%', padding: '18px', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', color: 'white',
+                                fontWeight: 'bold', fontSize: '20px', border: 'none', borderRadius: '16px', cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px'
                             }}
                         >
-                            <Unlock style={{ width: '28px', height: '28px' }} /> ปลดล็อค
+                            <Unlock style={{ width: '24px', height: '24px' }} /> ปลดล็อคหน้าจอ
                         </button>
-                        <Link href='/admin' className='text-blue-500 hover:text-blue-700 font-bold mt-4 text-center'>ไปหน้า Admin</Link>
                     </form>
                 </div>
             </div>
@@ -180,10 +172,9 @@ export default function TimePage() {
     };
     const currentStyle = statusStyles[status];
 
-    // Active Monitor - LARGE TEXT for projector
+    // Active Monitor
     return (
         <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', padding: '24px', overflow: 'hidden' }}>
-            {/* Header */}
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h1 style={{ fontSize: '32px', fontWeight: 'bold', color: '#1e40af', margin: 0 }}>{config.examTitle}</h1>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -201,30 +192,20 @@ export default function TimePage() {
                 </div>
             </header>
 
-            {/* Main Timer - VERY LARGE */}
             <section style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                 {currentSession ? (
                     <>
-                        {/* Session Name & Status */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '24px' }}>
                             <h2 style={{ fontSize: '40px', fontWeight: 'bold', color: '#334155', margin: 0 }}>{currentSession.name}</h2>
                             <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '10px',
-                                padding: '12px 24px',
-                                borderRadius: '999px',
-                                backgroundColor: currentStyle.bg,
-                                color: currentStyle.text,
-                                border: `3px solid ${currentStyle.border}`,
-                                fontWeight: 'bold',
-                                fontSize: '24px'
+                                display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 24px', borderRadius: '999px',
+                                backgroundColor: currentStyle.bg, color: currentStyle.text, border: `3px solid ${currentStyle.border}`,
+                                fontWeight: 'bold', fontSize: '24px'
                             }}>
                                 {currentStyle.label}
                             </div>
                         </div>
 
-                        {/* Timer Numbers - HUGE */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
                             <TimeUnit value={timeLeft.hours} label="ชม." />
                             <span style={{ fontSize: '100px', color: '#93c5fd', fontWeight: '300', lineHeight: 1 }}>:</span>
@@ -233,7 +214,6 @@ export default function TimePage() {
                             <TimeUnit value={timeLeft.seconds} label="วินาที" />
                         </div>
 
-                        {/* Current Time */}
                         <div style={{ marginTop: '24px', textAlign: 'center' }}>
                             <span style={{ fontSize: '20px', color: '#64748b', marginRight: '12px' }}>เวลาปัจจุบัน:</span>
                             <span style={{ fontSize: '32px', fontWeight: 'bold', color: '#1e40af', fontFamily: 'monospace' }}>{currentTime}</span>
@@ -244,37 +224,22 @@ export default function TimePage() {
                 )}
             </section>
 
-            {/* Announcements - LARGER TEXT */}
-            {config.announcements && config.announcements.length > 0 && (
+            {config.announcements?.length > 0 && (
                 <section style={{
-                    width: '100%',
-                    backgroundColor: 'rgba(255,255,255,0.8)',
-                    borderRadius: '20px',
-                    padding: '24px 32px',
-                    border: '2px solid #bfdbfe',
-                    marginBottom: '16px'
+                    width: '100%', backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: '20px',
+                    padding: '24px 32px', border: '2px solid #bfdbfe', marginBottom: '16px'
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px', paddingBottom: '12px', borderBottom: '2px solid #e0e7ff' }}>
-                        <div style={{ padding: '10px', borderRadius: '10px', backgroundColor: '#fef3c7', color: '#d97706' }}>
-                            <Megaphone style={{ width: '28px', height: '28px' }} />
-                        </div>
+                        <Megaphone style={{ width: '28px', height: '28px', color: '#d97706' }} />
                         <h2 style={{ fontSize: '28px', fontWeight: 'bold', color: '#334155', margin: 0 }}>ประกาศสำคัญ</h2>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         {config.announcements.map((item: string, index: number) => (
                             <div key={index} style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', fontSize: '26px', color: '#334155' }}>
                                 <span style={{
-                                    flexShrink: 0,
-                                    width: '36px',
-                                    height: '36px',
-                                    borderRadius: '50%',
-                                    backgroundColor: '#3b82f6',
-                                    color: 'white',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontWeight: 'bold',
-                                    fontSize: '18px'
+                                    flexShrink: 0, width: '36px', height: '36px', borderRadius: '50%',
+                                    backgroundColor: '#3b82f6', color: 'white', display: 'flex',
+                                    alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '18px'
                                 }}>
                                     {index + 1}
                                 </span>
@@ -285,11 +250,10 @@ export default function TimePage() {
                 </section>
             )}
 
-            {/* Footer */}
             <footer style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '2px solid #e0e7ff' }}>
                 <Link href="/admin" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', textDecoration: 'none', fontSize: '16px' }}>
                     <Settings style={{ width: '20px', height: '20px' }} />
-                    <span>การตั้งค่า</span>
+                    <span>จัดการ</span>
                 </Link>
                 {currentSession && (
                     <span style={{ color: '#64748b', fontSize: '18px', fontFamily: 'monospace' }}>
@@ -298,23 +262,7 @@ export default function TimePage() {
                         {new Date(currentSession.endTime).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                 )}
-                <Link
-                    href="/"
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '12px 24px',
-                        backgroundColor: '#f0f9ff',
-                        border: '2px solid #bae6fd',
-                        borderRadius: '12px',
-                        color: '#0369a1',
-                        fontWeight: 'bold',
-                        textDecoration: 'none'
-                    }}
-                >
-                    เอกสารประกอบการสอบ
-                </Link>
+                <div style={{ fontSize: '14px', color: '#94a3b8' }}>ExamID: {id}</div>
             </footer>
         </div>
     );
@@ -324,19 +272,10 @@ function TimeUnit({ value, label }: { value: number, label: string }) {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <div style={{
-                backgroundColor: 'rgba(255,255,255,0.95)',
-                borderRadius: '20px',
-                boxShadow: '0 15px 50px rgba(59,130,246,0.2)',
-                padding: '20px 32px',
-                border: '2px solid #dbeafe'
+                backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '20px',
+                boxShadow: '0 15px 50px rgba(59,130,246,0.2)', padding: '20px 32px', border: '2px solid #dbeafe'
             }}>
-                <span style={{
-                    fontSize: '120px',
-                    fontWeight: '900',
-                    color: '#2563eb',
-                    fontFamily: 'monospace',
-                    lineHeight: 1
-                }}>
+                <span style={{ fontSize: '120px', fontWeight: '900', color: '#2563eb', fontFamily: 'monospace', lineHeight: 1 }}>
                     {String(value).padStart(2, '0')}
                 </span>
             </div>

@@ -1,192 +1,135 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { FolderLock, Clock } from 'lucide-react';
 import useSWR from 'swr';
+import Link from 'next/link';
+import { Settings, Clock, Users, ArrowRight, Layout, ShieldCheck } from 'lucide-react';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export default function Home() {
-  const { data: config, error } = useSWR('/api/config', fetcher);
+export default function HomePage() {
+
   const router = useRouter();
 
-  const [selectedSubject, setSelectedSubject] = useState<any>(null);
-  const [pin, setPin] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-
-  const handleSubjectClick = (subject: any) => {
-    setSelectedSubject(subject);
-    setPin('');
-    setErrorMsg('');
-  };
-
-  const handlePinSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (pin === selectedSubject.pin) {
-      sessionStorage.setItem(`access_${selectedSubject.folder}`, 'true');
-      router.push(`/resources/${selectedSubject.folder}`);
-    } else {
-      setErrorMsg('รหัสวิชาไม่ถูกต้อง');
-      setPin('');
-    }
-  };
-
-  if (error) return <div style={{ padding: '32px', color: '#dc2626' }}>Failed to load</div>;
-  if (!config) return (
-    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: '48px', height: '48px', border: '4px solid #3b82f6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
-  );
+  useEffect(() => {
+    router.push('/admin');
+  }, []);
 
   return (
-    <div style={{ minHeight: '100vh', padding: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      {/* Header */}
-      <div style={{ width: '100%', maxWidth: '900px', marginBottom: '40px', textAlign: 'center' }}>
-        <h1 style={{ fontSize: '36px', fontWeight: 'bold', color: '#1e40af', marginBottom: '8px' }}>
-          {config.examTitle}
+    <div style={{ minHeight: '100vh', padding: '48px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      {/* Hero Section */}
+      {/* <div style={{ textAlign: 'center', marginBottom: '60px', maxWidth: '800px' }}>
+        <div style={{ display: 'inline-flex', padding: '12px', backgroundColor: '#dbeafe', borderRadius: '20px', marginBottom: '24px' }}>
+          <ShieldCheck style={{ width: '48px', height: '48px', color: '#2563eb' }} />
+        </div>
+        <h1 style={{ fontSize: '48px', fontWeight: 'bold', color: '#1e40af', marginBottom: '16px', letterSpacing: '-0.02em' }}>
+          Exam Monitor & Resources
         </h1>
-        <p style={{ fontSize: '20px', color: '#475569' }}>
-          เลือกรายวิชาที่ต้องการเข้าดูเอกสาร
+        <p style={{ fontSize: '20px', color: '#64748b', lineHeight: 1.6 }}>
+          ระบบควบคุมเวลาสอบและกระจายเอกสารประกอบการสอบ <br />
+          กรุณาเลือกห้องสอบหรือวิชาที่คุณต้องการเข้าถึง
         </p>
       </div>
 
-      {/* Subject Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', width: '100%', maxWidth: '900px' }}>
-        {config.subjects?.map((subject: any) => (
-          <button
-            key={subject.id}
-            onClick={() => handleSubjectClick(subject)}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '24px', width: '100%', maxWidth: '1100px' }}>
+        {exams.map((exam: any) => (
+          <div
+            key={exam.id}
             style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              padding: '40px 24px',
               backgroundColor: 'rgba(255,255,255,0.9)',
               border: '2px solid #bfdbfe',
-              borderRadius: '20px',
-              cursor: 'pointer',
-              textAlign: 'center',
-              boxShadow: '0 8px 30px rgba(59,130,246,0.15)',
-              transition: 'all 0.2s'
+              borderRadius: '24px',
+              padding: '32px',
+              boxShadow: '0 10px 30px rgba(59,130,246,0.1)',
+              display: 'flex',
+              flexDirection: 'column'
             }}
-            onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.borderColor = '#3b82f6'; }}
-            onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = '#bfdbfe'; }}
           >
-            <div style={{ padding: '16px', backgroundColor: '#dbeafe', borderRadius: '16px', marginBottom: '16px' }}>
-              <FolderLock style={{ width: '48px', height: '48px', color: '#2563eb' }} />
+            <h2 style={{ fontSize: '28px', fontWeight: 'bold', color: '#1e40af', marginBottom: '24px' }}>{exam.title}</h2>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <Link
+                href={`/exam/${exam.id}`}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '24px 16px',
+                  backgroundColor: '#f8fafc',
+                  border: '2px solid #e2e8f0',
+                  borderRadius: '16px',
+                  textDecoration: 'none',
+                  transition: 'all 0.2s',
+                  color: '#334155'
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.borderColor = '#a855f7'; e.currentTarget.style.backgroundColor = '#faf5ff'; }}
+                onMouseOut={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+              >
+                <div style={{ padding: '12px', backgroundColor: '#f3e8ff', borderRadius: '12px' }}>
+                  <Users style={{ width: '32px', height: '32px', color: '#a855f7' }} />
+                </div>
+                <span style={{ fontWeight: 'bold', fontSize: '18px' }}>สำหรับนักศึกษา</span>
+              </Link>
+
+              <Link
+                href={`/time/${exam.id}`}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '24px 16px',
+                  backgroundColor: '#f8fafc',
+                  border: '2px solid #e2e8f0',
+                  borderRadius: '16px',
+                  textDecoration: 'none',
+                  transition: 'all 0.2s',
+                  color: '#334155'
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.borderColor = '#fbbf24'; e.currentTarget.style.backgroundColor = '#fffbeb'; }}
+                onMouseOut={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+              >
+                <div style={{ padding: '12px', backgroundColor: '#fef3c7', borderRadius: '12px' }}>
+                  <Clock style={{ width: '32px', height: '32px', color: '#fbbf24' }} />
+                </div>
+                <span style={{ fontWeight: 'bold', fontSize: '18px' }}>สำหรับห้องสอบ</span>
+              </Link>
             </div>
-            <h3 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e40af', marginBottom: '8px' }}>{subject.name}</h3>
-            <p style={{ fontSize: '16px', color: '#64748b' }}>คลิกเพื่อใส่รหัสวิชา</p>
-          </button>
+          </div>
         ))}
+
+        {exams.length === 0 && (
+          <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px', backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: '24px', border: '2px dashed #bfdbfe' }}>
+            <Layout style={{ width: '48px', height: '48px', color: '#94a3b8', marginBottom: '16px' }} />
+            <p style={{ fontSize: '18px', color: '#64748b' }}>ยังไม่มีข้อมูลรอบการสอบ กรุณาแจ้งผู้ดูแลระบบ</p>
+          </div>
+        )}
       </div>
 
-      {/* Timer Link */}
-      {/* <a
-        href="/time"
+      <Link
+        href="/admin"
         style={{
-          marginTop: '48px',
+          marginTop: '60px',
           display: 'flex',
           alignItems: 'center',
           gap: '12px',
-          padding: '16px 32px',
-          backgroundColor: '#f0f9ff',
-          border: '2px solid #bae6fd',
+          color: '#64748b',
+          textDecoration: 'none',
+          fontWeight: '600',
+          fontSize: '16px',
+          padding: '12px 24px',
           borderRadius: '12px',
-          color: '#0369a1',
-          fontWeight: 'bold',
-          fontSize: '18px',
-          textDecoration: 'none'
+          backgroundColor: 'rgba(255,255,255,0.5)',
+          border: '1px solid #e2e8f0'
         }}
       >
-        <Clock style={{ width: '24px', height: '24px' }} />
-        หน้าจอแสดงเวลาสอบ (สำหรับโปรเจกเตอร์)
-      </a> */}
-
-      {/* PIN Modal */}
-      {selectedSubject && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '16px',
-          zIndex: 100
-        }}>
-          <div style={{
-            width: '100%',
-            maxWidth: '400px',
-            backgroundColor: 'white',
-            borderRadius: '20px',
-            padding: '32px',
-            boxShadow: '0 25px 50px rgba(0,0,0,0.25)'
-          }}>
-            <h3 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e40af', marginBottom: '8px' }}>กรอกรหัสวิชา</h3>
-            <p style={{ color: '#64748b', marginBottom: '24px' }}>วิชา: {selectedSubject.name}</p>
-
-            <form onSubmit={handlePinSubmit}>
-              <input
-                type="password"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                placeholder="รหัสวิชา"
-                style={{
-                  width: '100%',
-                  padding: '16px',
-                  border: '2px solid #bfdbfe',
-                  borderRadius: '12px',
-                  textAlign: 'center',
-                  fontSize: '24px',
-                  fontWeight: 'bold',
-                  color: '#1e40af',
-                  marginBottom: '16px',
-                  outline: 'none'
-                }}
-                autoFocus
-              />
-              {errorMsg && <p style={{ color: '#dc2626', textAlign: 'center', marginBottom: '16px' }}>{errorMsg}</p>}
-
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedSubject(null)}
-                  style={{
-                    flex: 1,
-                    padding: '14px',
-                    backgroundColor: '#f1f5f9',
-                    border: 'none',
-                    borderRadius: '12px',
-                    color: '#475569',
-                    fontWeight: 'bold',
-                    cursor: 'pointer'
-                  }}
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    flex: 1,
-                    padding: '14px',
-                    background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
-                    border: 'none',
-                    borderRadius: '12px',
-                    color: 'white',
-                    fontWeight: 'bold',
-                    cursor: 'pointer'
-                  }}
-                >
-                  ยืนยัน
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+        <Settings style={{ width: '20px', height: '20px' }} />
+        <span>สำหรับผู้ดูแลระบบ (Admin Dashboard)</span>
+        <ArrowRight style={{ width: '16px', height: '16px' }} />
+      </Link> 
+      */}
     </div>
   );
 }

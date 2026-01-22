@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server';
-import { getConfig, updateConfig, getAdminPin } from '@/lib/db';
+import { getExamById, updateExamConfig, getAdminPinForExam } from '@/lib/db';
+
+// This legacy route will now just point to the first exam (id 1) 
+// to prevent breaking anything that still calls /api/config
+const DEFAULT_EXAM_ID = 1;
 
 export async function GET() {
   try {
-    const config = getConfig();
+    const config = getExamById(DEFAULT_EXAM_ID);
+    if (!config) {
+      return NextResponse.json({ error: 'Default exam not found' }, { status: 404 });
+    }
     return NextResponse.json(config);
   } catch (error) {
     console.error('Error reading config:', error);
@@ -17,12 +24,12 @@ export async function POST(request: Request) {
     const { adminPin, ...newConfig } = body;
 
     // Security Check
-    const currentAdminPin = getAdminPin();
+    const currentAdminPin = getAdminPinForExam(DEFAULT_EXAM_ID);
     if (adminPin !== currentAdminPin) {
       return NextResponse.json({ error: 'Invalid Admin PIN' }, { status: 401 });
     }
 
-    const updatedConfig = updateConfig(newConfig);
+    const updatedConfig = updateExamConfig(DEFAULT_EXAM_ID, { ...newConfig, adminPinInput: adminPin });
 
     return NextResponse.json({ success: true, config: updatedConfig });
 

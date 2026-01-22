@@ -9,7 +9,8 @@ import useSWR from 'swr';
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function ResourcesPage() {
-    const { data: config, error } = useSWR('/api/config', fetcher);
+    // Default to exam 1 if accessed directly
+    const { data: config, error } = useSWR('/api/exams/1', fetcher);
     const router = useRouter();
 
     const [selectedSubject, setSelectedSubject] = useState<any>(null);
@@ -33,7 +34,7 @@ export default function ResourcesPage() {
         }
     };
 
-    if (error) return <div style={{ padding: '32px', color: '#dc2626' }}>Failed to load</div>;
+    if (error) return <div style={{ padding: '32px', color: '#dc2626' }}>ไม่พบข้อมูลรายวิชา</div>;
     if (!config) return (
         <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ width: '48px', height: '48px', border: '4px solid #3b82f6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
@@ -51,7 +52,7 @@ export default function ResourcesPage() {
 
             {/* Header */}
             <div style={{ marginBottom: '32px' }}>
-                <h1 style={{ fontSize: '32px', fontWeight: 'bold', color: '#1e40af', marginBottom: '8px' }}>เอกสารประกอบการสอบ</h1>
+                <h1 style={{ fontSize: '32px', fontWeight: 'bold', color: '#1e40af', marginBottom: '8px' }}>{config.examTitle}</h1>
                 <p style={{ fontSize: '18px', color: '#475569' }}>เลือกรายวิชาที่ต้องการเข้าดูเอกสาร (ต้องใช้รหัสวิชา)</p>
             </div>
 
