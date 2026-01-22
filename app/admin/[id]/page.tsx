@@ -116,7 +116,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
     const addSession = () => {
         setFormData({
             ...formData,
-            sessions: [...formData.sessions, { name: "รอบที่ " + (formData.sessions.length + 1), startTime: "", endTime: "" }]
+            sessions: [...formData.sessions, { id: 'temp_' + Date.now(), name: "รอบที่ " + (formData.sessions.length + 1), startTime: "", endTime: "" }]
         });
     };
 
@@ -149,7 +149,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
     const addSubject = () => {
         setFormData({
             ...formData,
-            subjects: [...formData.subjects, { id: "", name: "", folder: "", pin: "" }]
+            subjects: [...formData.subjects, { id: 'temp_' + Date.now(), subject_id: "", name: "", folder: "", pin: "" }]
         });
     };
 
@@ -301,7 +301,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         {formData.sessions.map((s: any, idx: number) => (
-                            <div key={idx} style={{ padding: '16px', backgroundColor: '#0f172a', borderRadius: '12px', border: '1px solid #334155', position: 'relative' }}>
+                            <div key={s.id || idx} style={{ padding: '16px', backgroundColor: '#0f172a', borderRadius: '12px', border: '1px solid #334155', position: 'relative' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr auto', gap: '12px', alignItems: 'end' }}>
                                     <div>
                                         <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>ชื่อรอบ</label>
@@ -336,7 +336,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {formData.announcements.map((ann: string, idx: number) => (
-                            <div key={idx} style={{ display: 'flex', gap: '8px' }}>
+                            <div key={'ann_' + idx} style={{ display: 'flex', gap: '8px' }}>
                                 <input type="text" value={ann} onChange={(e) => handleAnnouncementChange(idx, e.target.value)} style={{ flex: 1, padding: '12px', backgroundColor: '#0f172a', border: '1px solid #475569', borderRadius: '8px', color: 'white' }} />
                                 <button onClick={() => removeAnnouncement(idx)} style={{ padding: '8px 12px', backgroundColor: 'rgba(239,68,68,0.1)', color: '#f87171', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
                                     <Trash2 style={{ width: '18px', height: '18px' }} />
@@ -358,11 +358,11 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         {formData.subjects.map((s: any, idx: number) => (
-                            <div key={idx} style={{ padding: '16px', backgroundColor: '#0f172a', borderRadius: '12px', border: '1px solid #334155' }}>
+                            <div key={s.id || idx} style={{ padding: '16px', backgroundColor: '#0f172a', borderRadius: '12px', border: '1px solid #334155' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: '10px', alignItems: 'end' }}>
                                     <div>
                                         <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>รหัสย่อ (ID)</label>
-                                        <input type="text" value={s.id} onChange={(e) => handleSubjectChange(idx, 'id', e.target.value)} placeholder="JAVA101" style={{ width: '100%', padding: '8px', backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '6px', color: 'white' }} />
+                                        <input type="text" value={s.subject_id} onChange={(e) => handleSubjectChange(idx, 'subject_id', e.target.value)} placeholder="JAVA101" style={{ width: '100%', padding: '8px', backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '6px', color: 'white' }} />
                                     </div>
                                     <div>
                                         <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>ชื่อวิชา</label>

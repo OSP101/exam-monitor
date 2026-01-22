@@ -120,7 +120,8 @@ export function getExamById(id: number | string) {
         })),
         announcements: announcements.map((a: any) => a.content),
         subjects: subjects.map((s: any) => ({
-            id: s.subject_id,
+            id: s.id,
+            subject_id: s.subject_id,
             name: s.name,
             folder: s.folder,
             pin: s.pin
@@ -177,7 +178,7 @@ export function updateExamConfig(id: number | string, data: any) {
                 db.prepare('DELETE FROM subjects WHERE exam_id = ?').run(id);
                 const insertSubject = db.prepare('INSERT INTO subjects (exam_id, subject_id, name, folder, pin) VALUES (?, ?, ?, ?, ?)');
                 subjects.forEach((s: any) => {
-                    insertSubject.run(id, s.id || '', s.name || '', s.folder || '', s.pin || '');
+                    insertSubject.run(id, s.subject_id || '', s.name || '', s.folder || '', s.pin || '');
                 });
             }
         });
