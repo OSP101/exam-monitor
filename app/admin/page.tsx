@@ -42,6 +42,7 @@ export default function AdminDashboard() {
     };
 
     const handleDelete = async (id: number) => {
+        console.log('Deleting exam id:', id);
         if (!confirm(t('confirm_delete_exam'))) return;
         const pin = prompt(t('prompt_admin_pin'));
         if (!pin) return;
@@ -49,7 +50,10 @@ export default function AdminDashboard() {
         try {
             const res = await fetch(`/api/exams/${id}`, {
                 method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Admin-Pin': pin
+                },
                 body: JSON.stringify({ adminPinInput: pin })
             });
             if (res.ok) {
@@ -73,7 +77,7 @@ export default function AdminDashboard() {
                     </div>
                     <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: 'white', marginBottom: '8px' }}>{t('login_admin')}</h2>
                     <p style={{ color: '#94a3b8', marginBottom: '16px' }}>{t('login_admin_sub')}</p>
-                    <form onSubmit={async (e) => { e.preventDefault(); setAuthError(''); try { const res = await fetch('/api/admin/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_pin: pin }) }); if (res.ok) { setIsAuthenticated(true); } else { setAuthError(t('incorrect_pin')); } } catch { setAuthError('Error'); } }}>
+                    <form onSubmit={async (e) => { e.preventDefault(); setAuthError(''); try { const res = await fetch('/api/admin/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminPin: pin }) }); if (res.ok) { setIsAuthenticated(true); } else { const data = await res.json(); setAuthError(data.error || t('incorrect_pin')); } } catch { setAuthError('Error'); } }}>
                         <div style={{ position: 'relative', marginBottom: '12px' }}>
                             <input
                                 type={showPin ? "text" : "password"}
