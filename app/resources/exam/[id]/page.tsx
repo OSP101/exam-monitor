@@ -6,9 +6,12 @@ import Link from 'next/link';
 import { ArrowLeft, FileText, Download, AlertTriangle, FolderOpen } from 'lucide-react';
 import useSWR from 'swr';
 
+import { useLocale } from '@/lib/LocaleContext';
+
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function ExamUnifiedResourcesPage({ params }: { params: Promise<{ id: string }> }) {
+    const { locale, setLocale, t } = useLocale();
     const router = useRouter();
     const { id } = use(params);
 
@@ -40,28 +43,35 @@ export default function ExamUnifiedResourcesPage({ params }: { params: Promise<{
     return (
         <div style={{ minHeight: '100vh', padding: '32px', backgroundColor: '#f8fafc' }}>
             <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-                {/* Back Button */}
-                <Link href={`/exam/${id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#64748b', textDecoration: 'none', marginBottom: '24px', fontWeight: '500' }}>
-                    <ArrowLeft style={{ width: '20px', height: '20px' }} />
-                    ย้อนกลับไปหน้ารายวิชา
-                </Link>
+                {/* Header Section */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                    <Link href={`/exam/${id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#64748b', textDecoration: 'none', fontWeight: '500' }}>
+                        <ArrowLeft style={{ width: '20px', height: '20px' }} />
+                        {t('back_to_exam')}
+                    </Link>
 
-                {/* Header */}
-                <div style={{ marginBottom: '32px', padding: '24px', backgroundColor: 'white', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={() => setLocale('th')} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: locale === 'th' ? '#3b82f6' : 'white', color: locale === 'th' ? 'white' : '#64748b', cursor: 'pointer', fontWeight: 'bold' }}>TH</button>
+                        <button onClick={() => setLocale('en')} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: locale === 'en' ? '#3b82f6' : 'white', color: locale === 'en' ? 'white' : '#64748b', cursor: 'pointer', fontWeight: 'bold' }}>EN</button>
+                    </div>
+                </div>
+
+                {/* Header Info */}
+                <div style={{ marginBottom: '32px', padding: '32px', backgroundColor: 'white', borderRadius: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
                         <div style={{ padding: '12px', backgroundColor: '#fef9c3', borderRadius: '12px' }}>
                             <FolderOpen style={{ width: '32px', height: '32px', color: '#ca8a04' }} />
                         </div>
-                        <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#1e40af', margin: 0 }}>เอกสารประกอบการสอบทั้งหมด</h1>
+                        <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#1e40af', margin: 0 }}>{t('all_documents')}</h1>
                     </div>
-                    <p style={{ color: '#64748b', fontSize: '16px', margin: '8px 0 0' }}>รวมไฟล์ที่แชร์สำหรับการสอบนี้ทั้งหมด</p>
+                    <p style={{ color: '#64748b', fontSize: '16px', margin: '8px 0 0' }}>{t('shared_files_intro')}</p>
                 </div>
 
                 {/* Error */}
                 {error && (
-                    <div style={{ padding: '24px', borderRadius: '12px', backgroundColor: '#fef2f2', border: '2px solid #fecaca', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                    <div style={{ padding: '24px', borderRadius: '16px', backgroundColor: '#fef2f2', border: '1px solid #fee2e2', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
                         <AlertTriangle style={{ width: '24px', height: '24px' }} />
-                        <span>ไม่สามารถโหลดรายชื่อไฟล์ได้ กรุณาลองใหม่อีกครั้ง</span>
+                        <span>{t('error_loading_files')} {t('retry_later')}</span>
                     </div>
                 )}
 
@@ -115,8 +125,8 @@ export default function ExamUnifiedResourcesPage({ params }: { params: Promise<{
                 {filesData && filesData.files && filesData.files.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '100px 24px', backgroundColor: 'white', borderRadius: '24px', border: '2px dashed #e2e8f0' }}>
                         <FolderOpen style={{ width: '64px', height: '64px', color: '#cbd5e1', marginBottom: '16px', margin: '0 auto' }} />
-                        <h3 style={{ fontSize: '20px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>ยยังไม่มีไฟล์เอกสาร</h3>
-                        <p style={{ color: '#94a3b8' }}>ยังไม่มีการอัปโหลดเอกสารสำหรับการสอบนี้</p>
+                        <h3 style={{ fontSize: '20px', fontWeight: '600', color: '#475569', marginBottom: '8px' }}>{t('no_files_found')}</h3>
+                        <p style={{ color: '#94a3b8' }}>{t('no_files_uploaded')}</p>
                     </div>
                 )}
             </div>

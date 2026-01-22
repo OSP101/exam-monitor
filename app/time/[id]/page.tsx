@@ -3,7 +3,8 @@
 import { useState, useEffect, use } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { Settings, Lock, Unlock, Shield, Megaphone, ArrowLeft } from 'lucide-react';
+import { Settings, Lock, Unlock, Shield, Megaphone, ArrowLeft, Languages } from 'lucide-react';
+import { useLocale } from '@/lib/LocaleContext';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -11,32 +12,47 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
     const { id } = use(params);
     // Real-time sync: refresh every 3 seconds
     const { data: config } = useSWR(`/api/exams/${id}`, fetcher, { refreshInterval: 3000 });
+    const { locale, setLocale, t } = useLocale();
 
     const [isLocked, setIsLocked] = useState(true);
     const [pin, setPin] = useState('');
     const [errorMsg, setErrorMsg] = useState('');
-    const [currentSessionIndex, setCurrentSessionIndex] = useState(0);
 
-    // Timer state
+    const [currentSessionIndex, setCurrentSessionIndex] = useState(0);
     const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
     const [status, setStatus] = useState<'WAITING' | 'RUNNING' | 'EXPIRED'>('WAITING');
     const [currentTime, setCurrentTime] = useState('');
 
+    // Helper to find the best session to display based on current time
+    const getActiveSessionIndex = (sessions: any[]) => {
+        if (!sessions || sessions.length === 0) return 0;
+        const now = new Date().getTime();
+
+        // 1. Try to find a session that is CURRENTLY RUNNING
+        let idx = sessions.findIndex((s: any) => {
+            const start = new Date(s.startTime).getTime();
+            const end = new Date(s.endTime).getTime();
+            return now >= start && now < end;
+        });
+
+        // 2. If nothing running, find the NEXT UPCOMING session
+        if (idx === -1) {
+            idx = sessions.findIndex((s: any) => new Date(s.startTime).getTime() > now);
+        }
+
+        // 3. Fallback to the LAST session if everything is in the past
+        if (idx === -1) {
+            idx = sessions.length - 1;
+        }
+
+        return idx;
+    };
+
+    // Update index when config loads
     useEffect(() => {
         if (config?.sessions) {
-            const now = new Date().getTime();
-            let foundIndex = config.sessions.findIndex((s: any) => {
-                const start = new Date(s.startTime).getTime();
-                const end = new Date(s.endTime).getTime();
-                return now >= start && now < end;
-            });
-            if (foundIndex === -1) {
-                foundIndex = config.sessions.findIndex((s: any) => new Date(s.startTime).getTime() > now);
-            }
-            if (foundIndex === -1 && config.sessions.length > 0) {
-                foundIndex = config.sessions.length - 1;
-            }
-            if (foundIndex !== -1) setCurrentSessionIndex(foundIndex);
+            const idx = getActiveSessionIndex(config.sessions);
+            setCurrentSessionIndex(idx);
         }
     }, [config]);
 
@@ -48,6 +64,16 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
 
         const calculateTime = () => {
             const now = new Date().getTime();
+
+            // Re-check if we should be on a different session (automatic transition)
+            if (config?.sessions) {
+                const bestIdx = getActiveSessionIndex(config.sessions);
+                if (bestIdx !== currentSessionIndex) {
+                    setCurrentSessionIndex(bestIdx);
+                    return; // Next interval will pick up the new session
+                }
+            }
+
             const start = new Date(currentSession.startTime).getTime();
             const end = new Date(currentSession.endTime).getTime();
 
@@ -73,7 +99,7 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
             }
 
             // Update current time
-            setCurrentTime(new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+            setCurrentTime(new Date().toLocaleTimeString(locale === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
         };
 
         calculateTime();
@@ -88,7 +114,7 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
             setErrorMsg('');
             setPin('');
         } else {
-            setErrorMsg('รหัสผ่านไม่ถูกต้อง');
+            setErrorMsg(t('incorrect_pin'));
             setPin('');
         }
     };
@@ -125,22 +151,22 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                     border: '2px solid #bfdbfe'
                 }}>
                     <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', textDecoration: 'none', marginBottom: '24px', fontSize: '14px' }}>
-                        <ArrowLeft style={{ width: '16px', height: '16px' }} /> กลับหน้าแรก
+                        <ArrowLeft style={{ width: '16px', height: '16px' }} /> {t('back')}
                     </Link>
                     <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
                         <div style={{ padding: '20px', borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', boxShadow: '0 10px 30px rgba(59,130,246,0.4)' }}>
                             <Shield style={{ width: '40px', height: '40px', color: 'white' }} />
                         </div>
                     </div>
-                    <h1 style={{ fontSize: '24px', fontWeight: 'bold', textAlign: 'center', color: '#1e40af', marginBottom: '8px' }}>{config.examTitle}</h1>
-                    <p style={{ color: '#64748b', textAlign: 'center', marginBottom: '24px' }}>กรุณาใส่รหัสเพื่อเปิดหน้าจอเวลา</p>
+                    <h1 style={{ fontSize: '24px', fontWeight: 'bold', textAlign: 'center', color: '#1e40af', marginBottom: '8px' }}>{locale === 'en' ? (config.title_en || config.examTitle) : config.examTitle}</h1>
+                    <p style={{ color: '#64748b', textAlign: 'center', marginBottom: '24px' }}>{t('enter_pin')}</p>
 
                     <form onSubmit={handleUnlock}>
                         <input
                             type="password"
                             value={pin}
                             onChange={(e) => setPin(e.target.value)}
-                            placeholder="รหัสผ่าน Admin"
+                            placeholder={t('admin_pin')}
                             style={{
                                 width: '100%', padding: '16px', backgroundColor: 'white', border: '3px solid #bfdbfe', borderRadius: '16px',
                                 textAlign: 'center', fontSize: '24px', fontWeight: 'bold', color: '#1e40af', marginBottom: '16px', outline: 'none'
@@ -156,7 +182,7 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px'
                             }}
                         >
-                            <Unlock style={{ width: '24px', height: '24px' }} /> ปลดล็อคหน้าจอ
+                            <Unlock style={{ width: '24px', height: '24px' }} /> {t('login')}
                         </button>
                     </form>
                 </div>
@@ -166,9 +192,9 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
 
     // Status styles
     const statusStyles: any = {
-        WAITING: { bg: '#fef3c7', text: '#b45309', border: '#fcd34d', label: 'รอเริ่มสอบ' },
-        RUNNING: { bg: '#d1fae5', text: '#047857', border: '#6ee7b7', label: 'กำลังสอบ' },
-        EXPIRED: { bg: '#fee2e2', text: '#b91c1c', border: '#fca5a5', label: 'หมดเวลาสอบ' }
+        WAITING: { bg: '#fef3c7', text: '#b45309', border: '#fcd34d', label: t('waiting') },
+        RUNNING: { bg: '#d1fae5', text: '#047857', border: '#6ee7b7', label: t('running') },
+        EXPIRED: { bg: '#fee2e2', text: '#b91c1c', border: '#fca5a5', label: t('expired') }
     };
     const currentStyle = statusStyles[status];
 
@@ -176,13 +202,17 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
     return (
         <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', padding: '24px', overflow: 'hidden' }}>
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h1 style={{ fontSize: '32px', fontWeight: 'bold', color: '#1e40af', margin: 0 }}>{config.examTitle}</h1>
+                <h1 style={{ fontSize: '32px', fontWeight: 'bold', color: '#1e40af', margin: 0 }}>{locale === 'en' ? (config.title_en || config.examTitle) : config.examTitle}</h1>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     {currentSession && (
                         <span style={{ fontSize: '18px', color: '#64748b', fontWeight: '500' }}>
-                            รอบ {currentSessionIndex + 1} / {config.sessions.length}
+                            {locale === 'th' ? `รอบ ${currentSessionIndex + 1} / ${config.sessions.length}` : `Session ${currentSessionIndex + 1} / ${config.sessions.length}`}
                         </span>
                     )}
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={() => setLocale('th')} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #bfdbfe', backgroundColor: locale === 'th' ? '#3b82f6' : 'white', color: locale === 'th' ? 'white' : '#64748b', cursor: 'pointer', fontWeight: 'bold' }}>TH</button>
+                        <button onClick={() => setLocale('en')} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #bfdbfe', backgroundColor: locale === 'en' ? '#3b82f6' : 'white', color: locale === 'en' ? 'white' : '#64748b', cursor: 'pointer', fontWeight: 'bold' }}>EN</button>
+                    </div>
                     <button
                         onClick={() => setIsLocked(true)}
                         style={{ padding: '12px', borderRadius: '12px', backgroundColor: 'rgba(255,255,255,0.8)', border: '2px solid #bfdbfe', cursor: 'pointer' }}
@@ -196,7 +226,7 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                 {currentSession ? (
                     <>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '24px' }}>
-                            <h2 style={{ fontSize: '40px', fontWeight: 'bold', color: '#334155', margin: 0 }}>{currentSession.name}</h2>
+                            <h2 style={{ fontSize: '40px', fontWeight: 'bold', color: '#334155', margin: 0 }}>{locale === 'en' ? (currentSession.name_en || currentSession.name) : currentSession.name}</h2>
                             <div style={{
                                 display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 24px', borderRadius: '999px',
                                 backgroundColor: currentStyle.bg, color: currentStyle.text, border: `3px solid ${currentStyle.border}`,
@@ -207,15 +237,15 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
-                            <TimeUnit value={timeLeft.hours} label="ชม." />
+                            <TimeUnit value={timeLeft.hours} label={t('hour')} />
                             <span style={{ fontSize: '100px', color: '#93c5fd', fontWeight: '300', lineHeight: 1 }}>:</span>
-                            <TimeUnit value={timeLeft.minutes} label="นาที" />
+                            <TimeUnit value={timeLeft.minutes} label={t('minute')} />
                             <span style={{ fontSize: '100px', color: '#93c5fd', fontWeight: '300', lineHeight: 1 }}>:</span>
-                            <TimeUnit value={timeLeft.seconds} label="วินาที" />
+                            <TimeUnit value={timeLeft.seconds} label={t('second')} />
                         </div>
 
                         <div style={{ marginTop: '24px', textAlign: 'center' }}>
-                            <span style={{ fontSize: '20px', color: '#64748b', marginRight: '12px' }}>เวลาปัจจุบัน:</span>
+                            <span style={{ fontSize: '20px', color: '#64748b', marginRight: '12px' }}>{t('current_time')}:</span>
                             <span style={{ fontSize: '32px', fontWeight: 'bold', color: '#1e40af', fontFamily: 'monospace' }}>{currentTime}</span>
                         </div>
                     </>
@@ -231,21 +261,24 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px', paddingBottom: '12px', borderBottom: '2px solid #e0e7ff' }}>
                         <Megaphone style={{ width: '28px', height: '28px', color: '#d97706' }} />
-                        <h2 style={{ fontSize: '28px', fontWeight: 'bold', color: '#334155', margin: 0 }}>ประกาศสำคัญ</h2>
+                        <h2 style={{ fontSize: '28px', fontWeight: 'bold', color: '#334155', margin: 0 }}>{t('announcements')}</h2>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        {config.announcements.map((item: string, index: number) => (
-                            <div key={index} style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', fontSize: '26px', color: '#334155' }}>
-                                <span style={{
-                                    flexShrink: 0, width: '36px', height: '36px', borderRadius: '50%',
-                                    backgroundColor: '#3b82f6', color: 'white', display: 'flex',
-                                    alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '18px'
-                                }}>
-                                    {index + 1}
-                                </span>
-                                <p style={{ margin: 0, lineHeight: 1.4, fontWeight: 'bold' }} >{item}</p>
-                            </div>
-                        ))}
+                        {config.announcements.map((item: any, index: number) => {
+                            const content = locale === 'en' ? (item.content_en || item.content) : item.content;
+                            return (
+                                <div key={index} style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', fontSize: '26px', color: '#334155' }}>
+                                    <span style={{
+                                        flexShrink: 0, width: '36px', height: '36px', borderRadius: '50%',
+                                        backgroundColor: '#3b82f6', color: 'white', display: 'flex',
+                                        alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '18px'
+                                    }}>
+                                        {index + 1}
+                                    </span>
+                                    <p style={{ margin: 0, lineHeight: 1.4, fontWeight: 'bold' }} >{content}</p>
+                                </div>
+                            );
+                        })}
                     </div>
                 </section>
             )}
@@ -253,7 +286,7 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
             <footer style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '2px solid #e0e7ff' }}>
                 <Link href="/admin" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', textDecoration: 'none', fontSize: '16px' }}>
                     <Settings style={{ width: '20px', height: '20px' }} />
-                    <span>จัดการ</span>
+                    <span>{t('admin_panel')}</span>
                 </Link>
                 {currentSession && (
                     <span style={{ color: '#64748b', fontSize: '18px', fontFamily: 'monospace' }}>

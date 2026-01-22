@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Kanit } from "next/font/google";
 import "./globals.css";
+import { LocaleProvider } from "@/lib/LocaleContext";
 
 const kanit = Kanit({
   weight: ['300', '400', '500', '600', '700', '800', '900'],
@@ -27,9 +28,11 @@ export default function RootLayout({
           color: '#1e293b'
         }}
       >
-        <main className="relative w-full min-h-screen">
-          {children}
-        </main>
+        <LocaleProvider>
+          <main className="relative w-full min-h-screen">
+            {children}
+          </main>
+        </LocaleProvider>
       </body>
     </html>
   );

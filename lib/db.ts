@@ -16,6 +16,7 @@ db.exec(`
     CREATE TABLE IF NOT EXISTS exams (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL DEFAULT 'รอบการสอบ',
+        title_en TEXT DEFAULT '',
         admin_pin TEXT NOT NULL DEFAULT 'admin1234',
         student_pin TEXT DEFAULT '',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -25,6 +26,7 @@ db.exec(`
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         exam_id INTEGER NOT NULL,
         name TEXT NOT NULL,
+        name_en TEXT DEFAULT '',
         start_time TEXT NOT NULL,
         end_time TEXT NOT NULL,
         sort_order INTEGER DEFAULT 0,
@@ -35,6 +37,7 @@ db.exec(`
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         exam_id INTEGER NOT NULL,
         content TEXT NOT NULL,
+        content_en TEXT DEFAULT '',
         sort_order INTEGER DEFAULT 0,
         FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE
     );
@@ -92,6 +95,9 @@ ensureColumn('subjects', 'exam_id');
 // ensure exams has file_sharing_enabled flag
 ensureColumn('exams', 'file_sharing_enabled');
 ensureColumn('exams', 'student_pin', 'TEXT', '');
+ensureColumn('exams', 'title_en', 'TEXT', '');
+ensureColumn('sessions', 'name_en', 'TEXT', '');
+ensureColumn('announcements', 'content_en', 'TEXT', '');
 
 // Helper functions for Exams
 export function getAllExams() {
@@ -109,16 +115,21 @@ export function getExamById(id: number | string) {
     return {
         id: exam.id,
         examTitle: exam.title,
+        title_en: exam.title_en || '',
         adminPin: exam.admin_pin,
         studentPin: exam.student_pin || '',
         fileSharingEnabled: !!exam.file_sharing_enabled,
         sessions: sessions.map((s: any) => ({
             id: s.id,
             name: s.name,
+            name_en: s.name_en || '',
             startTime: s.start_time,
             endTime: s.end_time
         })),
-        announcements: announcements.map((a: any) => a.content),
+        announcements: announcements.map((a: any) => ({
+            content: a.content,
+            content_en: a.content_en || ''
+        })),
         subjects: subjects.map((s: any) => ({
             id: s.id,
             subject_id: s.subject_id,
@@ -140,11 +151,14 @@ export function deleteExam(id: number | string) {
 
 export function updateExamConfig(id: number | string, data: any) {
     try {
-        const { examTitle, adminPin, studentPin, sessions, announcements, subjects } = data;
+        const { examTitle, title_en, adminPin, studentPin, sessions, announcements, subjects } = data;
 
         // Update main exam data
         if (examTitle !== undefined) {
             db.prepare('UPDATE exams SET title = ? WHERE id = ?').run(examTitle, id);
+        }
+        if (title_en !== undefined) {
+            db.prepare('UPDATE exams SET title_en = ? WHERE id = ?').run(title_en, id);
         }
         if (adminPin !== undefined) {
             db.prepare('UPDATE exams SET admin_pin = ? WHERE id = ?').run(adminPin, id);
@@ -158,18 +172,20 @@ export function updateExamConfig(id: number | string, data: any) {
             // Update sessions
             if (sessions !== undefined) {
                 db.prepare('DELETE FROM sessions WHERE exam_id = ?').run(id);
-                const insertSession = db.prepare('INSERT INTO sessions (exam_id, name, start_time, end_time, sort_order) VALUES (?, ?, ?, ?, ?)');
+                const insertSession = db.prepare('INSERT INTO sessions (exam_id, name, name_en, start_time, end_time, sort_order) VALUES (?, ?, ?, ?, ?, ?)');
                 sessions.forEach((s: any, idx: number) => {
-                    insertSession.run(id, s.name || '', s.startTime || '', s.endTime || '', idx);
+                    insertSession.run(id, s.name || '', s.name_en || '', s.startTime || '', s.endTime || '', idx);
                 });
             }
 
             // Update announcements
             if (announcements !== undefined) {
                 db.prepare('DELETE FROM announcements WHERE exam_id = ?').run(id);
-                const insertAnn = db.prepare('INSERT INTO announcements (exam_id, content, sort_order) VALUES (?, ?, ?)');
-                announcements.forEach((content: string, idx: number) => {
-                    insertAnn.run(id, content || '', idx);
+                const insertAnn = db.prepare('INSERT INTO announcements (exam_id, content, content_en, sort_order) VALUES (?, ?, ?, ?)');
+                announcements.forEach((a: any, idx: number) => {
+                    const content = typeof a === 'string' ? a : a.content;
+                    const content_en = typeof a === 'string' ? '' : a.content_en;
+                    insertAnn.run(id, content || '', content_en || '', idx);
                 });
             }
 

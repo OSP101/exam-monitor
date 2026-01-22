@@ -2,9 +2,10 @@
 
 import { useState, useEffect, use, useRef } from 'react';
 import useSWR from 'swr';
-import { Settings, Save, Lock, Megaphone, Clock, Plus, Trash2, ArrowLeft, FolderLock, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import { Settings, Save, Lock, Megaphone, Clock, Plus, Trash2, ArrowLeft, FolderLock, ShieldCheck, Eye, EyeOff, Languages } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useLocale } from '@/lib/LocaleContext';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -12,6 +13,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
     const { id } = use(params);
     const { data: exam, mutate } = useSWR(`/api/exams/${id}`, fetcher);
     const router = useRouter();
+    const { locale, setLocale, t } = useLocale();
 
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [pin, setPin] = useState('');
@@ -25,6 +27,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
 
     const [formData, setFormData] = useState<any>({
         examTitle: '',
+        title_en: '',
         adminPin: '',
         studentPin: '',
         sessions: [],
@@ -45,6 +48,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
         if (exam) {
             setFormData({
                 examTitle: exam.examTitle || '',
+                title_en: exam.title_en || '',
                 adminPin: exam.adminPin || '',
                 sessions: exam.sessions || [],
                 announcements: exam.announcements || [],
@@ -61,7 +65,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
             setIsAuthenticated(true);
             setErrorMsg('');
         } else {
-            setErrorMsg('รหัสผ่านไม่ถูกต้อง');
+            setErrorMsg(t('incorrect_pin'));
         }
     };
 
@@ -76,15 +80,60 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
             });
 
             if (res.ok) {
-                setSaveMsg('บันทึกสำเร็จ!');
+                setSaveMsg(t('save_success'));
+                // Parallel revalidation
                 mutate();
-                setTimeout(() => setSaveMsg(''), 3000);
+                setTimeout(() => {
+                    mutate(); // Second revalidation just in case
+                    setSaveMsg('');
+                }, 3000);
             } else {
                 const data = await res.json();
-                setSaveMsg(data.error || 'บันทึกไม่สำเร็จ');
+                setSaveMsg(data.error || t('save_failed'));
             }
         } catch (e) {
-            setSaveMsg('เกิดข้อผิดพลาด');
+            setSaveMsg(t('error_occurred'));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleTranslateAll = async () => {
+        setSaving(true);
+        setSaveMsg(t('translating_msg'));
+        try {
+            const translate = async (text: string) => {
+                if (!text || text.trim() === '') return '';
+                const res = await fetch('/api/translate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, target: 'en' })
+                });
+                const data = await res.json();
+                return data.translated || '';
+            };
+
+            const title_en = formData.title_en || await translate(formData.examTitle);
+
+            const sessions = await Promise.all(formData.sessions.map(async (s: any) => ({
+                ...s,
+                name_en: s.name_en || await translate(s.name)
+            })));
+
+            const announcements = await Promise.all(formData.announcements.map(async (a: any) => {
+                const content = typeof a === 'string' ? a : (a.content || '');
+                const currentEn = typeof a === 'string' ? '' : (a.content_en || '');
+                return {
+                    content: content,
+                    content_en: currentEn || await translate(content)
+                };
+            }));
+
+            setFormData({ ...formData, title_en, sessions, announcements });
+            setSaveMsg(t('translate_success'));
+        } catch (e) {
+            console.error(e);
+            setSaveMsg(t('translate_failed'));
         } finally {
             setSaving(false);
         }
@@ -116,7 +165,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
     const addSession = () => {
         setFormData({
             ...formData,
-            sessions: [...formData.sessions, { id: 'temp_' + Date.now(), name: "รอบที่ " + (formData.sessions.length + 1), startTime: "", endTime: "" }]
+            sessions: [...formData.sessions, { id: 'temp_' + Date.now(), name: t('round_label') + (formData.sessions.length + 1), startTime: "", endTime: "" }]
         });
     };
 
@@ -125,14 +174,16 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
         setFormData({ ...formData, sessions: newSessions });
     };
 
-    const handleAnnouncementChange = (idx: number, val: string) => {
+    const handleAnnouncementChange = (idx: number, field: string, val: string) => {
         const newAnn = [...formData.announcements];
-        newAnn[idx] = val;
+        const current = typeof newAnn[idx] === 'string' ? { content: newAnn[idx], content_en: "" } : { ...newAnn[idx] };
+        current[field] = val;
+        newAnn[idx] = current;
         setFormData({ ...formData, announcements: newAnn });
     };
 
     const addAnnouncement = () => {
-        setFormData({ ...formData, announcements: [...formData.announcements, ""] });
+        setFormData({ ...formData, announcements: [...formData.announcements, { content: "", content_en: "" }] });
     };
 
     const removeAnnouncement = (idx: number) => {
@@ -171,22 +222,22 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
             <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f172a', padding: '16px' }}>
                 <div style={{ backgroundColor: '#1e293b', padding: '32px', borderRadius: '16px', maxWidth: '400px', width: '100%', border: '1px solid #334155', textAlign: 'center' }}>
                     <Link href="/admin" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#64748b', textDecoration: 'none', marginBottom: '24px', fontSize: '14px' }}>
-                        <ArrowLeft style={{ width: '16px', height: '16px' }} /> ย้อนกลับ
+                        <ArrowLeft style={{ width: '16px', height: '16px' }} /> {t('back')}
                     </Link>
                     <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
                         <div style={{ padding: '12px', backgroundColor: '#3b82f6', borderRadius: '50%' }}>
                             <Lock style={{ width: '32px', height: '32px', color: 'white' }} />
                         </div>
                     </div>
-                    <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: 'white', marginBottom: '8px' }}>Admin PIN</h2>
-                    <p style={{ color: '#94a3b8', marginBottom: '24px', fontSize: '14px' }}>การตั้งค่าสำหรับ: {exam.examTitle}</p>
+                    <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: 'white', marginBottom: '8px' }}>{t('admin_pin')}</h2>
+                    <p style={{ color: '#94a3b8', marginBottom: '24px', fontSize: '14px' }}>{t('settings_for')} {exam.examTitle}</p>
                     <form onSubmit={handleLogin}>
                         <div style={{ position: 'relative', marginBottom: '16px' }}>
                             <input
                                 type={showLoginPin ? "text" : "password"}
                                 value={pin}
                                 onChange={(e) => setPin(e.target.value)}
-                                placeholder="กรอกรหัส Admin"
+                                placeholder={t('enter_admin_pin')}
                                 style={{
                                     width: '100%', padding: '14px', backgroundColor: '#334155', border: '1px solid #475569', borderRadius: '8px',
                                     color: 'white', textAlign: 'center', fontSize: '20px', outline: 'none'
@@ -205,7 +256,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                         <button type="submit" style={{
                             width: '100%', padding: '14px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', fontSize: '18px', cursor: 'pointer'
                         }}>
-                            ยืนยัน
+                            {t('confirm')}
                         </button>
                     </form>
                 </div>
@@ -222,14 +273,18 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                         <Link href="/admin" style={{ padding: '8px', color: '#94a3b8' }}>
                             <ArrowLeft style={{ width: '24px', height: '24px' }} />
                         </Link>
-                        <h1 style={{ fontSize: '28px', fontWeight: 'bold' }}>ตั้งค่าห้องสอบ</h1>
+                        <h1 style={{ fontSize: '28px', fontWeight: 'bold' }}>{t('exam_settings')}</h1>
                     </div>
-                    <div style={{ display: 'flex', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '8px', marginRight: '12px' }}>
+                            <button onClick={() => setLocale('th')} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #334155', backgroundColor: locale === 'th' ? '#3b82f6' : 'transparent', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>TH</button>
+                            <button onClick={() => setLocale('en')} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #334155', backgroundColor: locale === 'en' ? '#3b82f6' : 'transparent', color: 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>EN</button>
+                        </div>
                         <Link href={`/time/${id}`} target="_blank" style={{ padding: '10px 20px', backgroundColor: 'rgba(59,130,246,0.1)', border: '1px solid #3b82f6', borderRadius: '8px', color: '#60a5fa', textDecoration: 'none', fontSize: '14px' }}>
-                            เปิดหน้าจอเวลา
+                            {t('time_monitor_view')}
                         </Link>
                         <Link href={`/exam/${id}`} target="_blank" style={{ padding: '10px 20px', backgroundColor: 'rgba(168,85,247,0.1)', border: '1px solid #a855f7', borderRadius: '8px', color: '#a855f7', textDecoration: 'none', fontSize: '14px' }}>
-                            เปิดหน้าเด็ก
+                            {t('student_view')}
                         </Link>
                     </div>
                 </div>
@@ -237,11 +292,11 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                 {/* Section: General */}
                 <div style={{ padding: '24px', backgroundColor: '#1e293b', borderRadius: '16px', border: '1px solid #334155', marginBottom: '24px' }}>
                     <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Settings style={{ width: '18px', height: '18px', color: '#60a5fa' }} /> ข้อมูลทั่วไป
+                        <Settings style={{ width: '18px', height: '18px', color: '#60a5fa' }} /> {t('general_info')}
                     </h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
                         <div>
-                            <label style={{ fontSize: '14px', color: '#94a3b8', display: 'block', marginBottom: '8px' }}>ชื่อการสอบ / ชื่อวิชา</label>
+                            <label style={{ fontSize: '14px', color: '#94a3b8', display: 'block', marginBottom: '8px' }}>{t('exam_title_th')}</label>
                             <input
                                 type="text"
                                 value={formData.examTitle}
@@ -250,7 +305,16 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                             />
                         </div>
                         <div>
-                            <label style={{ fontSize: '14px', color: '#94a3b8', display: 'block', marginBottom: '8px' }}>รหัส Admin PIN ใหม่</label>
+                            <label style={{ fontSize: '14px', color: '#60a5fa', display: 'block', marginBottom: '8px' }}>{t('exam_title_en')}</label>
+                            <input
+                                type="text"
+                                value={formData.title_en}
+                                onChange={(e) => setFormData({ ...formData, title_en: e.target.value })}
+                                style={{ width: '100%', padding: '12px', backgroundColor: '#0f172a', border: '1px solid #475569', borderRadius: '8px', color: 'white', outline: 'none' }}
+                            />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: '14px', color: '#94a3b8', display: 'block', marginBottom: '8px' }}>{t('admin_pin_edit')}</label>
                             <div style={{ position: 'relative' }}>
                                 <input
                                     type={showAdminPin ? "text" : "password"}
@@ -268,13 +332,13 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                             </div>
                         </div>
                         <div>
-                            <label style={{ fontSize: '14px', color: '#facc15', display: 'block', marginBottom: '8px' }}>รหัส PIN สำหรับนักศึกษา (สิทธิ์ดูไฟล์ทั้งหมด)</label>
+                            <label style={{ fontSize: '14px', color: '#facc15', display: 'block', marginBottom: '8px' }}>{t('student_pin_label')}</label>
                             <div style={{ position: 'relative' }}>
                                 <input
                                     type={showStudentPin ? "text" : "password"}
                                     value={formData.studentPin}
                                     onChange={(e) => setFormData({ ...formData, studentPin: e.target.value })}
-                                    placeholder="เช่น 1234"
+                                    placeholder="e.g. 1234"
                                     style={{ width: '100%', padding: '12px', paddingRight: '45px', backgroundColor: '#0f172a', border: '1px solid #eab308', borderRadius: '8px', color: 'white', outline: 'none' }}
                                 />
                                 <button
@@ -293,26 +357,32 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                 <div style={{ padding: '24px', backgroundColor: '#1e293b', borderRadius: '16px', border: '1px solid #334155', marginBottom: '24px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
                         <h3 style={{ fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Clock style={{ width: '18px', height: '18px', color: '#fbbf24' }} /> รอบการสอบ (เซสชัน)
+                            <Clock style={{ width: '18px', height: '18px', color: '#fbbf24' }} /> {t('sessions')}
                         </h3>
                         <button onClick={addSession} style={{ padding: '6px 12px', backgroundColor: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid #3b82f6', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
-                            + เพิ่มรอบ
+                            + {t('add_session')}
                         </button>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         {formData.sessions.map((s: any, idx: number) => (
                             <div key={s.id || idx} style={{ padding: '16px', backgroundColor: '#0f172a', borderRadius: '12px', border: '1px solid #334155', position: 'relative' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr auto', gap: '12px', alignItems: 'end' }}>
-                                    <div>
-                                        <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>ชื่อรอบ</label>
-                                        <input type="text" value={s.name} onChange={(e) => handleSessionChange(idx, 'name', e.target.value)} style={{ width: '100%', padding: '8px', backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '6px', color: 'white' }} />
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                        <div>
+                                            <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>{t('session_name_th')}</label>
+                                            <input type="text" value={s.name} onChange={(e) => handleSessionChange(idx, 'name', e.target.value)} style={{ width: '100%', padding: '8px', backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '6px', color: 'white' }} />
+                                        </div>
+                                        <div>
+                                            <label style={{ fontSize: '12px', color: '#60a5fa', display: 'block', marginBottom: '4px' }}>{t('session_name_en')}</label>
+                                            <input type="text" value={s.name_en || ''} onChange={(e) => handleSessionChange(idx, 'name_en', e.target.value)} style={{ width: '100%', padding: '8px', backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '6px', color: 'white' }} />
+                                        </div>
                                     </div>
                                     <div>
-                                        <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>เริ่ม (24 ชม.)</label>
+                                        <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>{t('start_time')}</label>
                                         <input type="datetime-local" value={s.startTime} onChange={(e) => handleSessionChange(idx, 'startTime', e.target.value)} style={{ width: '100%', padding: '8px', backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '6px', color: 'white', colorScheme: 'dark' }} />
                                     </div>
                                     <div>
-                                        <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>สิ้นสุด (24 ชม.)</label>
+                                        <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>{t('end_time')}</label>
                                         <input type="datetime-local" value={s.endTime} onChange={(e) => handleSessionChange(idx, 'endTime', e.target.value)} style={{ width: '100%', padding: '8px', backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '6px', color: 'white', colorScheme: 'dark' }} />
                                     </div>
                                     <button onClick={() => removeSession(idx)} style={{ padding: '8px', backgroundColor: 'rgba(239,68,68,0.1)', color: '#f87171', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
@@ -328,21 +398,26 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                 <div style={{ padding: '24px', backgroundColor: '#1e293b', borderRadius: '16px', border: '1px solid #334155', marginBottom: '24px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
                         <h3 style={{ fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Megaphone style={{ width: '18px', height: '18px', color: '#4ade80' }} /> ข้อความประชาสัมพันธ์
+                            <Megaphone style={{ width: '18px', height: '18px', color: '#4ade80' }} /> {t('announcements')}
                         </h3>
                         <button onClick={addAnnouncement} style={{ padding: '6px 12px', backgroundColor: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid #22c55e', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
-                            + เพิ่มข้อความ
+                            + {t('add_announcement')}
                         </button>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {formData.announcements.map((ann: string, idx: number) => (
-                            <div key={'ann_' + idx} style={{ display: 'flex', gap: '8px' }}>
-                                <input type="text" value={ann} onChange={(e) => handleAnnouncementChange(idx, e.target.value)} style={{ flex: 1, padding: '12px', backgroundColor: '#0f172a', border: '1px solid #475569', borderRadius: '8px', color: 'white' }} />
-                                <button onClick={() => removeAnnouncement(idx)} style={{ padding: '8px 12px', backgroundColor: 'rgba(239,68,68,0.1)', color: '#f87171', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
-                                    <Trash2 style={{ width: '18px', height: '18px' }} />
-                                </button>
-                            </div>
-                        ))}
+                        {formData.announcements.map((ann: any, idx: number) => {
+                            const content = typeof ann === 'string' ? ann : (ann.content || '');
+                            const content_en = typeof ann === 'string' ? '' : (ann.content_en || '');
+                            return (
+                                <div key={'ann_' + idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '8px' }}>
+                                    <input type="text" value={content} onChange={(e) => handleAnnouncementChange(idx, 'content', e.target.value)} placeholder={t('announcement_th')} style={{ padding: '12px', backgroundColor: '#0f172a', border: '1px solid #475569', borderRadius: '8px', color: 'white' }} />
+                                    <input type="text" value={content_en} onChange={(e) => handleAnnouncementChange(idx, 'content_en', e.target.value)} placeholder={t('announcement_en')} style={{ padding: '12px', backgroundColor: '#0f172a', border: '1px solid #475569', borderRadius: '8px', color: 'white' }} />
+                                    <button onClick={() => removeAnnouncement(idx)} style={{ padding: '8px 12px', backgroundColor: 'rgba(239,68,68,0.1)', color: '#f87171', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                                        <Trash2 style={{ width: '18px', height: '18px' }} />
+                                    </button>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -350,10 +425,10 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                 <div style={{ padding: '24px', backgroundColor: '#1e293b', borderRadius: '16px', border: '1px solid #334155', marginBottom: '24px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
                         <h3 style={{ fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <FolderLock style={{ width: '18px', height: '18px', color: '#a855f7' }} /> รายการวิชา (เข้าดูสไลด์)
+                            <FolderLock style={{ width: '18px', height: '18px', color: '#a855f7' }} /> {t('subjects_info')}
                         </h3>
                         <button onClick={addSubject} style={{ padding: '6px 12px', backgroundColor: 'rgba(168,85,247,0.1)', color: '#a855f7', border: '1px solid #a855f7', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
-                            + เพิ่มวิชา
+                            + {t('add_subject')}
                         </button>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -361,19 +436,19 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                             <div key={s.id || idx} style={{ padding: '16px', backgroundColor: '#0f172a', borderRadius: '12px', border: '1px solid #334155' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: '10px', alignItems: 'end' }}>
                                     <div>
-                                        <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>รหัสย่อ (ID)</label>
+                                        <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>{t('subject_code')}</label>
                                         <input type="text" value={s.subject_id} onChange={(e) => handleSubjectChange(idx, 'subject_id', e.target.value)} placeholder="JAVA101" style={{ width: '100%', padding: '8px', backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '6px', color: 'white' }} />
                                     </div>
                                     <div>
-                                        <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>ชื่อวิชา</label>
+                                        <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>{t('subject_name')}</label>
                                         <input type="text" value={s.name} onChange={(e) => handleSubjectChange(idx, 'name', e.target.value)} placeholder="Java Programming" style={{ width: '100%', padding: '8px', backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '6px', color: 'white' }} />
                                     </div>
                                     <div>
-                                        <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>ชื่อโฟลเดอร์</label>
+                                        <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>{t('folder_name')}</label>
                                         <input type="text" value={s.folder} onChange={(e) => handleSubjectChange(idx, 'folder', e.target.value)} placeholder="java-mid" style={{ width: '100%', padding: '8px', backgroundColor: '#1e293b', border: '1px solid #475569', borderRadius: '6px', color: 'white' }} />
                                     </div>
                                     <div>
-                                        <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>PIN สำหรับวิชา</label>
+                                        <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>{t('file_access_pin')}</label>
                                         <div style={{ position: 'relative' }}>
                                             <input
                                                 type={showSubjectPinIdx === idx ? "text" : "password"}
@@ -404,10 +479,10 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                 <div style={{ padding: '24px', backgroundColor: '#1e293b', borderRadius: '16px', border: '1px solid #334155', marginBottom: '100px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
                         <h3 style={{ fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Settings style={{ width: '18px', height: '18px', color: '#a855f7' }} /> ไฟล์การสอบ (รวม)
+                            <Settings style={{ width: '18px', height: '18px', color: '#a855f7' }} /> {t('unified_files')}
                         </h3>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <label style={{ fontSize: '13px', color: '#94a3b8' }}>เปิดแชร์หน้าไฟล์:</label>
+                            <label style={{ fontSize: '13px', color: '#94a3b8' }}>{t('enable_file_sharing')}:</label>
                             <input
                                 type="checkbox"
                                 checked={formData.fileSharingEnabled}
@@ -419,19 +494,19 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
 
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
                         <button onClick={() => examFileInputRef.current?.click()} disabled={!formData.fileSharingEnabled || !isAuthenticated} style={{ padding: '8px 12px', background: 'linear-gradient(90deg,#0b1220,#111827)', border: '1px solid #2b3440', borderRadius: '8px', color: '#cbd5e1', cursor: (!formData.fileSharingEnabled || !isAuthenticated) ? 'not-allowed' : 'pointer' }}>
-                            อัปโหลดไฟล์ไปยังการสอบ
+                            {t('upload_unified_files')}
                         </button>
                         <input ref={examFileInputRef} type="file" multiple onChange={async (e) => {
                             const files = Array.from(e.target.files || []);
                             if (files.length === 0) return;
-                            if (!pin) { alert('กรุณาล็อกอินด้วย Admin PIN ก่อนอัปโหลด'); return; }
+                            if (!pin) { alert(t('prompt_admin_pin')); return; }
                             let success = 0;
                             let failed: string[] = [];
                             try {
                                 setUploading(true);
                                 for (let i = 0; i < files.length; i++) {
                                     const file = files[i];
-                                    setUploadMsg(`กำลังอัปโหลด ${i + 1}/${files.length} : ${file.name}`);
+                                    setUploadMsg(`${t('uploading')} ${i + 1}/${files.length} : ${file.name}`);
                                     try {
                                         const b64 = await fileToBase64(file);
                                         const res = await fetch('/api/files', {
@@ -451,31 +526,31 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                                     }
                                 }
                                 if (failed.length === 0) {
-                                    setUploadMsg(`อัปโหลดสำเร็จ ${success}/${files.length}`);
+                                    setUploadMsg(`${t('upload_complete')} ${success}/${files.length}`);
                                 } else {
-                                    setUploadMsg(`อัปโหลดเสร็จ โดยสำเร็จ ${success}/${files.length}. ผิดพลาด: ${failed.join('; ')}`);
+                                    setUploadMsg(`${t('uploading')} finished. Success ${success}/${files.length}. Errors: ${failed.join('; ')}`);
                                 }
                                 mutateFiles();
                             } catch (err) {
                                 console.error(err);
-                                setUploadMsg('เกิดข้อผิดพลาดระหว่างอัปโหลด');
+                                setUploadMsg(t('error_occurred'));
                             } finally {
                                 setUploading(false);
                             }
                         }} style={{ display: 'none' }} />
-                        <div style={{ color: '#94a3b8', fontSize: '13px' }}>{uploading ? 'กำลังอัปโหลด...' : (uploadMsg || 'ยังไม่มีการอัปโหลดล่าสุด')}</div>
+                        <div style={{ color: '#94a3b8', fontSize: '13px' }}>{uploading ? t('uploading') : (uploadMsg || '')}</div>
                     </div>
 
-                    {!filesList && <div style={{ color: '#94a3b8' }}>กำลังโหลด...</div>}
-                    {filesList && filesList.files && filesList.files.length === 0 && <div style={{ color: '#94a3b8' }}>ยังไม่มีไฟล์</div>}
+                    {!filesList && <div style={{ color: '#94a3b8' }}>{t('loading')}</div>}
+                    {filesList && filesList.files && filesList.files.length === 0 && <div style={{ color: '#94a3b8' }}>{t('no_unified_files')}</div>}
                     {filesList && filesList.files && (
                         <div style={{ overflowX: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                 <thead>
                                     <tr style={{ textAlign: 'left', borderBottom: '1px solid #172033' }}>
-                                        <th style={{ padding: '10px 8px' }}>ชื่อไฟล์</th>
-                                        <th style={{ padding: '10px 8px' }}>ขนาด</th>
-                                        <th style={{ padding: '10px 8px' }}>การกระทำ</th>
+                                        <th style={{ padding: '10px 8px' }}>{t('file_name')}</th>
+                                        <th style={{ padding: '10px 8px' }}>{t('size')}</th>
+                                        <th style={{ padding: '10px 8px' }}>{t('action')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -486,14 +561,14 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                                             </td>
                                             <td style={{ padding: '10px 8px' }}>{(f.size / 1024).toFixed(1)} KB</td>
                                             <td style={{ padding: '10px 8px' }}>
-                                                <a href={`/api/files/download?path=${encodeURIComponent(`${exam.id}/${f.path}`)}`} target="_blank" rel="noreferrer" style={{ marginRight: '8px', color: '#60a5fa' }}>ดาวน์โหลด</a>
+                                                <a href={`/api/files/download?path=${encodeURIComponent(`${exam.id}/${f.path}`)}`} target="_blank" rel="noreferrer" style={{ marginRight: '8px', color: '#60a5fa' }}>{t('download')}</a>
                                                 <button onClick={async () => {
-                                                    if (!confirm('ลบไฟล์นี้หรือไม่?')) return;
+                                                    if (!confirm(t('confirm_delete'))) return;
                                                     try {
                                                         const res = await fetch('/api/files', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: `${exam.id}/${f.path}`, adminPin: pin }) });
-                                                        if (res.ok) { mutateFiles(); } else { const data = await res.json(); alert(data.error || 'Delete failed'); }
+                                                        if (res.ok) { mutateFiles(); } else { const data = await res.json(); alert(data.error || t('delete_failed')); }
                                                     } catch (e) { console.error(e); }
-                                                }} style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer' }}>ลบ</button>
+                                                }} style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer' }}>{t('delete')}</button>
                                             </td>
                                         </tr>
                                     ))}
@@ -506,10 +581,14 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                 {/* Floating Save Button */}
                 <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '20px', backgroundColor: 'rgba(15,23,42,0.9)', borderTop: '1px solid #334155', display: 'flex', justifyContent: 'center', gap: '20px', zIndex: 100 }}>
                     <div style={{ maxWidth: '900px', width: '100%', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '20px' }}>
-                        {saveMsg && <span style={{ color: saveMsg.includes('สำเร็จ') ? '#4ade80' : '#f87171' }}>{saveMsg}</span>}
+                        {saveMsg && <span style={{ color: (saveMsg.includes('สำเร็จ') || saveMsg.includes('Success')) ? '#4ade80' : (saveMsg.includes('Processing') || saveMsg.includes('ประมวลผล') ? '#60a5fa' : '#f87171') }}>{saveMsg}</span>}
+                        <button onClick={handleTranslateAll} disabled={saving} style={{ padding: '14px 20px', backgroundColor: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid #3b82f6', borderRadius: '12px', fontWeight: 'bold', fontSize: '16px', cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Languages style={{ width: '20px', height: '20px' }} />
+                            {t('translate_all')}
+                        </button>
                         <button onClick={handleSave} disabled={saving} style={{ padding: '14px 40px', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', color: 'white', border: 'none', borderRadius: '12px', fontWeight: 'bold', fontSize: '18px', cursor: saving ? 'not-allowed' : 'pointer', boxShadow: '0 8px 15px rgba(59,130,246,0.3)' }}>
                             <Save style={{ width: '20px', height: '20px', marginRight: '8px', display: 'inline-block' }} />
-                            {saving ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}
+                            {saving ? t('saving') : t('save_settings')}
                         </button>
                     </div>
                 </div>

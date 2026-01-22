@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FolderLock, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import useSWR from 'swr';
 import Link from 'next/link';
+import { useLocale } from '@/lib/LocaleContext';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -12,6 +13,7 @@ export default function ExamSubjectsPage({ params }: { params: Promise<{ id: str
     const { id } = use(params);
     const { data: config, error } = useSWR(`/api/exams/${id}`, fetcher);
     const router = useRouter();
+    const { locale, setLocale, t } = useLocale();
 
     const [selectedSubject, setSelectedSubject] = useState<any>(null);
     const [pin, setPin] = useState('');
@@ -35,7 +37,7 @@ export default function ExamSubjectsPage({ params }: { params: Promise<{ id: str
             sessionStorage.setItem(`access_${selectedSubject.folder}`, 'true');
             router.push(`/resources/${selectedSubject.folder}`);
         } else {
-            setErrorMsg('รหัสวิชาไม่ถูกต้อง');
+            setErrorMsg(t('incorrect_pin'));
             setPin('');
         }
     };
@@ -47,7 +49,7 @@ export default function ExamSubjectsPage({ params }: { params: Promise<{ id: str
             sessionStorage.setItem(`access_exam_${config.id}`, 'true');
             router.push(`/resources/exam/${config.id}`);
         } else {
-            setErrorMsg('รหัส PIN ไม่ถูกต้อง');
+            setErrorMsg(t('incorrect_pin'));
             setExamPin('');
         }
     };
@@ -63,13 +65,19 @@ export default function ExamSubjectsPage({ params }: { params: Promise<{ id: str
     return (
         <div style={{ minHeight: '100vh', padding: '48px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <div style={{ width: '100%', maxWidth: '900px', marginBottom: '32px' }}>
-                <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#64748b', textDecoration: 'none', marginBottom: '24px' }}>
-                    <ArrowLeft style={{ width: '20px', height: '20px' }} /> ย้อนกลับ
-                </Link>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                    <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#64748b', textDecoration: 'none' }}>
+                        <ArrowLeft style={{ width: '20px', height: '20px' }} /> {t('back')}
+                    </Link>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={() => setLocale('th')} style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: locale === 'th' ? '#3b82f6' : 'white', color: locale === 'th' ? 'white' : '#64748b', cursor: 'pointer' }}>TH</button>
+                        <button onClick={() => setLocale('en')} style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', backgroundColor: locale === 'en' ? '#3b82f6' : 'white', color: locale === 'en' ? 'white' : '#64748b', cursor: 'pointer' }}>EN</button>
+                    </div>
+                </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                        <h1 style={{ fontSize: '36px', fontWeight: 'bold', color: '#1e40af', marginBottom: '8px' }}>{config.examTitle}</h1>
-                        <p style={{ fontSize: '20px', color: '#64748b' }}>กรุณาเลือกรายวิชาหรือเอกสารที่ต้องการเข้าดู</p>
+                        <h1 style={{ fontSize: '36px', fontWeight: 'bold', color: '#1e40af', marginBottom: '8px' }}>{locale === 'en' ? (config.title_en || config.examTitle) : config.examTitle}</h1>
+                        <p style={{ fontSize: '20px', color: '#64748b' }}>{t('select_subject')}</p>
                     </div>
                     {config.fileSharingEnabled && (
                         <button
@@ -79,7 +87,7 @@ export default function ExamSubjectsPage({ params }: { params: Promise<{ id: str
                             }}
                         >
                             <FolderLock style={{ width: '24px', height: '24px' }} />
-                            ดูเอกสารเตรียมสอบ (ทั้งหมด)
+                            {t('view_docs')}
                         </button>
                     )}
                 </div>

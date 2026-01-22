@@ -7,9 +7,12 @@ import { ArrowLeft, FileText, Download, AlertTriangle, FolderOpen } from 'lucide
 import useSWR from 'swr';
 import { use } from 'react';
 
+import { useLocale } from '@/lib/LocaleContext';
+
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function SubjectResourcesPage({ params }: { params: Promise<{ subject: string }> }) {
+    const { locale, setLocale, t } = useLocale();
     const router = useRouter();
     const { subject } = use(params);
 
@@ -20,7 +23,7 @@ export default function SubjectResourcesPage({ params }: { params: Promise<{ sub
         if (typeof window !== 'undefined') {
             const isAuth = sessionStorage.getItem(`access_${subject}`);
             if (!isAuth) {
-                router.replace('/');
+                router.replace('/resources');
             } else {
                 setAuthorized(true);
             }
@@ -34,43 +37,50 @@ export default function SubjectResourcesPage({ params }: { params: Promise<{ sub
     if (!authorized) return null;
 
     return (
-        <div style={{ minHeight: '100vh', padding: '32px' }}>
-            <div style={{ maxWidth: '1500px', margin: '0 auto' }}>
-                {/* Back Button */}
-                <Link href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#3b82f6', textDecoration: 'none', marginBottom: '24px', fontWeight: '500' }}>
-                    <ArrowLeft style={{ width: '20px', height: '20px' }} />
-                    เลือกวิชาอื่น
-                </Link>
+        <div style={{ minHeight: '100vh', padding: '32px', backgroundColor: '#f8fafc' }}>
+            <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+                {/* Header Section */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                    <Link href="/resources" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#3b82f6', textDecoration: 'none', fontWeight: '500' }}>
+                        <ArrowLeft style={{ width: '20px', height: '20px' }} />
+                        {t('back_to_subjects')}
+                    </Link>
 
-                {/* Header */}
-                <div style={{ marginBottom: '32px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
-                        <div style={{ padding: '12px', backgroundColor: '#dbeafe', borderRadius: '12px' }}>
-                            <FolderOpen style={{ width: '32px', height: '32px', color: '#2563eb' }} />
-                        </div>
-                        <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#1e40af', margin: 0 }}>เอกสาร: {subject}</h1>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={() => setLocale('th')} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: locale === 'th' ? '#3b82f6' : 'white', color: locale === 'th' ? 'white' : '#64748b', cursor: 'pointer', fontWeight: 'bold' }}>TH</button>
+                        <button onClick={() => setLocale('en')} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: locale === 'en' ? '#3b82f6' : 'white', color: locale === 'en' ? 'white' : '#64748b', cursor: 'pointer', fontWeight: 'bold' }}>EN</button>
                     </div>
-                    <p style={{ color: '#64748b', fontSize: '16px' }}>รายการไฟล์ทั้งหมดในโฟลเดอร์นี้</p>
+                </div>
+
+                {/* Header Info */}
+                <div style={{ marginBottom: '32px', padding: '32px', backgroundColor: 'white', borderRadius: '24px', boxShadow: '0 4px 6px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
+                        <div style={{ padding: '12px', backgroundColor: '#eff6ff', borderRadius: '12px' }}>
+                            <FolderOpen style={{ width: '32px', height: '32px', color: '#3b82f6' }} />
+                        </div>
+                        <h1 style={{ fontSize: '28px', fontWeight: 'bold', color: '#1e293b', margin: 0 }}>{t('documents')}: {subject}</h1>
+                    </div>
+                    <p style={{ color: '#64748b', fontSize: '16px', margin: '8px 0 0' }}>{t('file_list_in_folder')}</p>
                 </div>
 
                 {/* Error */}
                 {error && (
-                    <div style={{ padding: '24px', borderRadius: '12px', backgroundColor: '#fef2f2', border: '2px solid #fecaca', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ padding: '24px', borderRadius: '16px', backgroundColor: '#fef2f2', border: '1px solid #fee2e2', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
                         <AlertTriangle style={{ width: '24px', height: '24px' }} />
-                        <span>ไม่สามารถโหลดรายชื่อไฟล์ได้ หรือโฟลเดอร์ไม่ถูกต้อง</span>
+                        <span>{t('error_loading_files')}</span>
                     </div>
                 )}
 
                 {/* Loading */}
                 {!filesData && !error && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '100px' }}>
                         <div style={{ width: '40px', height: '40px', border: '4px solid #3b82f6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
                         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                     </div>
                 )}
 
                 {/* File Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' }}>
                     {filesData?.files?.map((file: any, index: number) => (
                         <a
                             key={index}
@@ -79,73 +89,75 @@ export default function SubjectResourcesPage({ params }: { params: Promise<{ sub
                             rel="noopener noreferrer"
                             style={{
                                 display: 'flex',
-                                alignItems: 'flex-start',
+                                alignItems: 'center',
                                 padding: '20px',
-                                backgroundColor: 'rgba(255,255,255,0.9)',
-                                border: '2px solid #bfdbfe',
-                                borderRadius: '12px',
+                                backgroundColor: 'white',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '16px',
                                 textDecoration: 'none',
-                                transition: 'all 0.2s'
+                                transition: 'all 0.2s',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
                             }}
-                            onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(59,130,246,0.2)'; }}
-                            onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = '#bfdbfe'; e.currentTarget.style.boxShadow = 'none'; }}
+                            onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 10px 20px rgba(59,130,246,0.1)'; }}
+                            onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.02)'; }}
                         >
-                            <div style={{ padding: '12px', backgroundColor: '#dbeafe', borderRadius: '10px', marginRight: '16px' }}>
-                                <FileText style={{ width: '24px', height: '24px', color: '#2563eb' }} />
+                            <div style={{ padding: '10px', backgroundColor: '#eff6ff', borderRadius: '10px', marginRight: '16px' }}>
+                                <FileText style={{ width: '24px', height: '24px', color: '#3b82f6' }} />
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                                <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#1e40af', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>
+                                <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#1e293b', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.name}>
                                     {file.name}
                                 </h4>
-                                <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
+                                <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>
                                     {(file.size / 1024).toFixed(1)} KB
                                 </p>
                             </div>
-                            <Download style={{ width: '20px', height: '20px', color: '#94a3b8', flexShrink: 0 }} />
+                            <Download style={{ width: '20px', height: '20px', color: '#94a3b8', flexShrink: 0, marginLeft: '12px' }} />
                         </a>
                     ))}
-
-
                 </div>
-                <div style={{ marginTop: '50px' }}>
-                    {subject === 'JavaWeb_Resource' && (
-                    <Link
+
+                {/* Special Link for JavaWeb_Resource */}
+                {subject === 'JavaWeb_Resource' && (
+                    <div style={{ marginTop: '32px' }}>
+                        <a
                             href={`http://10.199.10.10`}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{
                                 display: 'flex',
-                                alignItems: 'flex-start',
-                                padding: '20px',
-                                backgroundColor: 'rgba(255,255,255,0.9)',
-                                border: '2px solid #bfdbfe',
-                                borderRadius: '12px',
+                                alignItems: 'center',
+                                padding: '24px',
+                                backgroundColor: '#fdf4ff',
+                                border: '2px dashed #e9d5ff',
+                                borderRadius: '20px',
                                 textDecoration: 'none',
                                 transition: 'all 0.2s'
                             }}
-                            onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(59,130,246,0.2)'; }}
-                            onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = '#bfdbfe'; e.currentTarget.style.boxShadow = 'none'; }}
+                            onMouseOver={(e) => { e.currentTarget.style.borderColor = '#d8b4fe'; e.currentTarget.style.backgroundColor = '#f5e6ff'; }}
+                            onMouseOut={(e) => { e.currentTarget.style.borderColor = '#e9d5ff'; e.currentTarget.style.backgroundColor = '#fdf4ff'; }}
                         >
-                            <div style={{ padding: '12px', backgroundColor: '#dbeafe', borderRadius: '10px', marginRight: '16px' }}>
-                                <FileText style={{ width: '24px', height: '24px', color: '#2563eb' }} />
+                            <div style={{ padding: '12px', backgroundColor: '#f5e6ff', borderRadius: '12px', marginRight: '20px' }}>
+                                <FileText style={{ width: '32px', height: '32px', color: '#a855f7' }} />
                             </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <h4 style={{ fontSize: '16px', fontWeight: '600', color: '#1e40af', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={"เอกสารประกอบการสอบ"}>
+                            <div style={{ flex: 1 }}>
+                                <h4 style={{ fontSize: '18px', fontWeight: 'bold', color: '#7e22ce', marginBottom: '4px' }}>
                                     Username and Password Database
                                 </h4>
-                                <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
-                                    ข้อมูลผู้ใช้และรหัสผ่านสำหรับฐานข้อมูลที่ต้องใช้
+                                <p style={{ fontSize: '15px', color: '#9333ea', margin: 0 }}>
+                                    {locale === 'en' ? 'Database credentials for the exam' : 'ข้อมูลผู้ใช้และรหัสผ่านสำหรับฐานข้อมูลที่ต้องใช้'}
                                 </p>
                             </div>
-                            </Link>
-                    )}
-                        </div>
+                            <Download style={{ width: '24px', height: '24px', color: '#d8b4fe' }} />
+                        </a>
+                    </div>
+                )}
 
                 {/* Empty State */}
                 {filesData?.files?.length === 0 && (
-                    <div style={{ textAlign: 'center', padding: '48px', color: '#94a3b8' }}>
-                        <FolderOpen style={{ width: '48px', height: '48px', marginBottom: '16px', opacity: 0.5 }} />
-                        <p style={{ fontSize: '18px' }}>ไม่พบไฟล์ในโฟลเดอร์นี้</p>
+                    <div style={{ textAlign: 'center', padding: '100px 24px', backgroundColor: 'white', borderRadius: '24px', border: '2px dashed #e2e8f0' }}>
+                        <FolderOpen style={{ width: '64px', height: '64px', color: '#cbd5e1', marginBottom: '16px', margin: '0 auto' }} />
+                        <p style={{ fontSize: '18px', color: '#64748b' }}>{t('no_files_found')}</p>
                     </div>
                 )}
             </div>
