@@ -138,67 +138,76 @@ export function deleteExam(id: number | string) {
 }
 
 export function updateExamConfig(id: number | string, data: any) {
-    const { examTitle, adminPin, studentPin, sessions, announcements, subjects } = data;
+    try {
+        const { examTitle, adminPin, studentPin, sessions, announcements, subjects } = data;
 
-    // Update main exam data
-    if (examTitle !== undefined) {
-        db.prepare('UPDATE exams SET title = ? WHERE id = ?').run(examTitle, id);
-    }
-    if (adminPin !== undefined) {
-        db.prepare('UPDATE exams SET admin_pin = ? WHERE id = ?').run(adminPin, id);
-    }
-    if (studentPin !== undefined) {
-        db.prepare('UPDATE exams SET student_pin = ? WHERE id = ?').run(studentPin, id);
-    }
-
-    // Wrap in transaction for sessions, ann, subjects
-    const transaction = db.transaction(() => {
-        // Update sessions
-        if (sessions !== undefined) {
-            db.prepare('DELETE FROM sessions WHERE exam_id = ?').run(id);
-            const insertSession = db.prepare('INSERT INTO sessions (exam_id, name, start_time, end_time, sort_order) VALUES (?, ?, ?, ?, ?)');
-            sessions.forEach((s: any, idx: number) => {
-                insertSession.run(id, s.name, s.startTime, s.endTime, idx);
-            });
+        // Update main exam data
+        if (examTitle !== undefined) {
+            db.prepare('UPDATE exams SET title = ? WHERE id = ?').run(examTitle, id);
+        }
+        if (adminPin !== undefined) {
+            db.prepare('UPDATE exams SET admin_pin = ? WHERE id = ?').run(adminPin, id);
+        }
+        if (studentPin !== undefined) {
+            db.prepare('UPDATE exams SET student_pin = ? WHERE id = ?').run(studentPin, id);
         }
 
-        // Update announcements
-        if (announcements !== undefined) {
-            db.prepare('DELETE FROM announcements WHERE exam_id = ?').run(id);
-            const insertAnn = db.prepare('INSERT INTO announcements (exam_id, content, sort_order) VALUES (?, ?, ?)');
-            announcements.forEach((content: string, idx: number) => {
-                insertAnn.run(id, content, idx);
-            });
-        }
+        // Wrap in transaction for sessions, ann, subjects
+        const transaction = db.transaction(() => {
+            // Update sessions
+            if (sessions !== undefined) {
+                db.prepare('DELETE FROM sessions WHERE exam_id = ?').run(id);
+                const insertSession = db.prepare('INSERT INTO sessions (exam_id, name, start_time, end_time, sort_order) VALUES (?, ?, ?, ?, ?)');
+                sessions.forEach((s: any, idx: number) => {
+                    insertSession.run(id, s.name || '', s.startTime || '', s.endTime || '', idx);
+                });
+            }
 
-        // Update subjects
-        if (subjects !== undefined) {
-            db.prepare('DELETE FROM subjects WHERE exam_id = ?').run(id);
-            const insertSubject = db.prepare('INSERT INTO subjects (exam_id, subject_id, name, folder, pin) VALUES (?, ?, ?, ?, ?)');
-            subjects.forEach((s: any) => {
-                insertSubject.run(id, s.id, s.name, s.folder, s.pin);
-            });
-        }
-    });
+            // Update announcements
+            if (announcements !== undefined) {
+                db.prepare('DELETE FROM announcements WHERE exam_id = ?').run(id);
+                const insertAnn = db.prepare('INSERT INTO announcements (exam_id, content, sort_order) VALUES (?, ?, ?)');
+                announcements.forEach((content: string, idx: number) => {
+                    insertAnn.run(id, content || '', idx);
+                });
+            }
 
-    transaction();
+            // Update subjects
+            if (subjects !== undefined) {
+                db.prepare('DELETE FROM subjects WHERE exam_id = ?').run(id);
+                const insertSubject = db.prepare('INSERT INTO subjects (exam_id, subject_id, name, folder, pin) VALUES (?, ?, ?, ?, ?)');
+                subjects.forEach((s: any) => {
+                    insertSubject.run(id, s.id || '', s.name || '', s.folder || '', s.pin || '');
+                });
+            }
+        });
 
-    // 4. File sharing toggle
-    if (data.fileSharingEnabled !== undefined) {
-        const enabled = !!data.fileSharingEnabled;
-        db.prepare('UPDATE exams SET file_sharing_enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
+        transaction();
 
-        if (enabled) {
-            try {
-                const examDir = path.join(process.cwd(), 'data', String(id));
-                if (!fs.existsSync(examDir)) fs.mkdirSync(examDir, { recursive: true });
-            } catch (e) {
-                console.error('Failed to create exam data folder', e);
+        // 4. File sharing toggle
+        if (data.fileSharingEnabled !== undefined) {
+            const enabled = !!data.fileSharingEnabled;
+            db.prepare('UPDATE exams SET file_sharing_enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
+
+            if (enabled) {
+                try {
+                    const examDir = path.join(process.cwd(), 'data', String(id));
+                    if (!fs.existsSync(examDir)) {
+                        fs.mkdirSync(examDir, { recursive: true });
+                        console.log(`Created directory: ${examDir}`);
+                    }
+                } catch (e) {
+                    console.error(`PERMISSION ERROR: Failed to create directory for exam ${id}. Please check data/ folder permissions.`, e);
+                    // We don't throw here to allow other config updates to succeed
+                }
             }
         }
-    }
 
-    return getExamById(id);
+        return getExamById(id);
+    } catch (error) {
+        console.error('DATABASE ERROR in updateExamConfig:', error);
+        throw error;
+    }
 }
 
 export function getAdminPinForExam(id: number | string) {

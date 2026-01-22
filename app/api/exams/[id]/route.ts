@@ -74,9 +74,9 @@ export async function POST(
 
         const updatedExam = updateExamConfig(id, updateData);
         return NextResponse.json({ success: true, exam: updatedExam });
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error updating exam:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
     }
 }
 
