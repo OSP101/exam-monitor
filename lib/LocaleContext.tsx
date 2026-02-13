@@ -1,0 +1,262 @@
+'use client';
+
+import React, { createContext, useContext, useState, useEffect } from 'react';
+
+type Locale = 'th' | 'en';
+
+const translations = {
+    th: {
+        back: 'ย้อนกลับ',
+        home: 'หน้าแรก',
+        admin_panel: 'ระบบจัดการการสอบ',
+        create_new: 'สร้างใหม่',
+        save: 'บันทึก',
+        cancel: 'ยกเลิก',
+        delete: 'ลบ',
+        login: 'ล็อกอิน',
+        admin_pin: 'รหัส Admin PIN',
+        student_pin: 'รหัส PIN นักศึกษา',
+        share_files: 'แชร์ไฟล์',
+        sessions: 'รอบการสอบ',
+        announcements: 'ประกาศสำคัญ',
+        subjects: 'รายวิชา',
+        files: 'ไฟล์การสอบ',
+        start_time: 'เวลาเริ่ม',
+        end_time: 'เวลาสิ้นสุด',
+        current_time: 'เวลาปัจจุบัน',
+        waiting: 'รอเริ่มสอบ',
+        running: 'กำลังสอบ',
+        expired: 'หมดเวลา',
+        hour: 'ชม.',
+        minute: 'นาที',
+        second: 'วินาที',
+        enter_pin: 'กรุณากรอกรหัส PIN',
+        incorrect_pin: 'รหัส PIN ไม่ถูกต้อง',
+        upload_complete: 'อัปโหลดสำเร็จ',
+        upload_failed: 'อัปโหลดล้มเหลว',
+        select_subject: 'กรุณาเลือกรายวิชาหรือเอกสารที่ต้องการเข้าดู',
+        view_docs: 'ดูเอกสารเตรียมสอบ (ทั้งหมด)',
+        admin_dashboard: 'ระบบจัดการการสอบหลายห้อง',
+        create_exam: 'สร้างห้องสอบใหม่',
+        exam_name_placeholder: 'ชื่อห้องสอบ หรือ ชื่อวิชา (เช่น ห้อง 501 - Java)',
+        manage_settings: 'จัดการตั้งค่า',
+        time_monitor_view: 'หน้าจอเวลา',
+        student_view: 'หน้าเด็ก',
+        delete_exam: 'ลบห้องสอบนี้',
+        no_exams: 'ยังไม่มีห้องสอบ คลิก "สร้างห้องสอบใหม่" ด้านบนเพื่อเริ่ม',
+        confirm_delete_exam: 'คุณแน่ใจหรือไม่ว่าต้องการลบรอบการสอบนี้? ข้อมูลทั้งหมดรวมถึงประกาศและเซสชันจะถูกลบถาวร',
+        prompt_admin_pin: 'กรุณากรอกรหัส Admin PIN เพื่อยืนยันการลบ',
+        login_admin: 'เข้าสู่ระบบผู้ดูแล',
+        login_admin_sub: 'กรุณากรอกรหัส Admin เพื่อเข้าสู่แดชบอร์ด',
+        back_to_subjects: 'เลือกวิชาอื่น',
+        back_to_exam: 'ย้อนกลับไปหน้ารายวิชา',
+        documents: 'เอกสาร',
+        all_documents: 'เอกสารประกอบการสอบทั้งหมด',
+        file_list_in_folder: 'รายการไฟล์ทั้งหมดในโฟลเดอร์นี้',
+        shared_files_intro: 'รวมไฟล์ที่แชร์สำหรับการสอบนี้ทั้งหมด',
+        error_loading_files: 'ไม่สามารถโหลดรายชื่อไฟล์ได้ หรือโฟลเดอร์ไม่ถูกต้อง',
+        no_files_found: 'ไม่พบไฟล์ในโฟลเดอร์นี้',
+        no_files_uploaded: 'ยังไม่มีการอัปโหลดเอกสารสำหรับการสอบนี้',
+        retry_later: 'กรุณาลองใหม่อีกครั้ง',
+        enter_subject_pin: 'กรอกรหัสวิชา',
+        select_subject_docs: 'เลือกรายวิชาที่ต้องการเข้าดูเอกสาร (ต้องใช้รหัสวิชา)',
+        click_to_enter_pin: 'คลิกเพื่อใส่รหัสวิชา',
+        confirm: 'ยืนยัน',
+        incorrect_subject_pin: 'รหัสวิชาไม่ถูกต้อง',
+        subject_label: 'วิชา:',
+        no_exam_data: 'ไม่พบข้อมูลรายวิชา',
+        back_home: 'กลับหน้าหลัก',
+        save_success: 'บันทึกสำเร็จ!',
+        save_failed: 'บันทึกไม่สำเร็จ',
+        error_occurred: 'เกิดข้อผิดพลาด',
+        translating_msg: 'กำลังประมวลผลการแปล...',
+        translate_success: 'แปลสำเร็จ! (กรุณากดบันทึกเพื่อยืนยัน)',
+        translate_failed: 'แปลไม่สำเร็จ โปรดลองอีกครั้ง',
+        round_label: 'รอบที่ ',
+        settings_for: 'การตั้งค่าสำหรับ:',
+        enter_admin_pin: 'กรอกรหัส Admin',
+        exam_settings: 'ตั้งค่าห้องสอบ',
+        general_info: 'ข้อมูลทั่วไป',
+        exam_title_th: 'ชื่อการสอบ (ภาษาไทย)',
+        exam_title_en: 'ชื่อการสอบ (ภาษาอังกฤษ - Auto)',
+        admin_pin_edit: 'รหัส Admin (สำหรับแก้ไข)',
+        student_pin_label: 'รหัส PIN สำหรับให้นักศึกษาดูเอกสาร',
+        enable_file_sharing: 'เปิดระบบแชร์ไฟล์สำหรับห้องสอบนี้',
+        unified_files: 'ไฟล์รวม (สำหรับการสอบนี้)',
+        no_unified_files: 'ยังไม่มีไฟล์รวม',
+        upload_unified_files: 'อัปโหลดไฟล์รวม',
+        add_session: 'เพิ่มรอบการสอบ',
+        session_name_th: 'ชื่อรอบ (TH)',
+        session_name_en: 'ชื่อรอบ (EN - Auto)',
+        announcement_th: 'ประกาศ (TH)',
+        announcement_en: 'ประกาศ (EN - Auto)',
+        subjects_info: 'รายวิชา / ข้อมูลเพิ่มเติม',
+        subject_code: 'รหัสวิชา (6 หลัก)',
+        subject_name: 'ชื่อวิชา',
+        folder_name: 'ชื่อโฟลเดอร์ไฟล์',
+        file_access_pin: 'รหัสผ่านเข้าดูไฟล์',
+        save_settings: 'บันทึกการตั้งค่า',
+        translate_all: 'แปลข้อมูลทั้งหมด (TH ➜ EN)',
+        uploading: 'กำลังอัปโหลด...',
+        choose_file: 'เลือกไฟล์',
+        no_announcements: 'ยังไม่มีประกาศสำคัญ',
+        add_announcement: 'เพิ่มประกาศใหม่',
+        add_subject: 'เพิ่มรายวิชาใหม่',
+        no_subjects: 'ยังไม่มีรายวิชา',
+        file_name: 'ชื่อไฟล์',
+        size: 'ขนาด',
+        action: 'การกระทำ',
+        download: 'ดาวน์โหลด',
+        loading: 'กำลังโหลด...',
+        delete_failed: 'ลบไม่สำเร็จ',
+        saving: 'กำลังบันทึก...',
+        confirm_delete: 'ยืนยันการลบไฟล์นี้หรือไม่?',
+    },
+    en: {
+        back: 'Back',
+        home: 'Home',
+        admin_panel: 'Exam Management System',
+        create_new: 'Create New',
+        save: 'Save',
+        cancel: 'Cancel',
+        delete: 'Delete',
+        login: 'Login',
+        admin_pin: 'Admin PIN',
+        student_pin: 'Student PIN',
+        share_files: 'Share Files',
+        sessions: 'Exam Sessions',
+        announcements: 'Announcements',
+        subjects: 'Subjects',
+        files: 'Exam Files',
+        start_time: 'Start Time',
+        end_time: 'End Time',
+        current_time: 'Current Time',
+        waiting: 'Waiting',
+        running: 'In Progress',
+        expired: 'Expired',
+        hour: 'Hr',
+        minute: 'Min',
+        second: 'Sec',
+        enter_pin: 'Please enter PIN',
+        incorrect_pin: 'Incorrect PIN',
+        upload_complete: 'Upload Complete',
+        upload_failed: 'Upload Failed',
+        select_subject: 'Please select a subject or document to view',
+        view_docs: 'View Exam Documents (Total)',
+        admin_dashboard: 'Multi-Exam Admin Dashboard',
+        create_exam: 'Create New Exam',
+        exam_name_placeholder: 'Exam Name or Subject (e.g., Room 501 - Java)',
+        manage_settings: 'Manage Settings',
+        time_monitor_view: 'Time Monitor',
+        student_view: 'Student View',
+        delete_exam: 'Delete Exam',
+        no_exams: 'No exams found. Click "Create New Exam" above to start.',
+        confirm_delete_exam: 'Are you sure you want to delete this exam? All data including announcements and sessions will be permanently deleted.',
+        prompt_admin_pin: 'Please enter Admin PIN to confirm deletion.',
+        login_admin: 'Admin Login',
+        login_admin_sub: 'Please enter Admin PIN to enter dashboard',
+        back_to_subjects: 'Back to Subjects',
+        back_to_exam: 'Back to Exam Page',
+        documents: 'Documents',
+        all_documents: 'All Exam Documents',
+        file_list_in_folder: 'All files in this folder',
+        shared_files_intro: 'Shared files for this exam',
+        error_loading_files: 'Unable to load file list or invalid folder',
+        no_files_found: 'No files found in this folder',
+        no_files_uploaded: 'No documents uploaded for this exam',
+        retry_later: 'Please try again later',
+        enter_subject_pin: 'Enter Subject PIN',
+        select_subject_docs: 'Select a subject to view documents (Subject PIN required)',
+        click_to_enter_pin: 'Click to enter PIN',
+        confirm: 'Confirm',
+        incorrect_subject_pin: 'Incorrect Subject PIN',
+        subject_label: 'Subject:',
+        no_exam_data: 'No exam data found',
+        back_home: 'Back to Home',
+        save_success: 'Save Successful!',
+        save_failed: 'Save Failed',
+        error_occurred: 'An error occurred',
+        translating_msg: 'Processing translation...',
+        translate_success: 'Translation successful! (Click Save to confirm)',
+        translate_failed: 'Translation failed, please try again',
+        round_label: 'Round ',
+        settings_for: 'Settings for:',
+        enter_admin_pin: 'Enter Admin PIN',
+        exam_settings: 'Exam Settings',
+        general_info: 'General Information',
+        exam_title_th: 'Exam Title (Thai)',
+        exam_title_en: 'Exam Title (English - Auto)',
+        admin_pin_edit: 'Admin PIN (for editing)',
+        student_pin_label: 'Student PIN (for viewing documents)',
+        enable_file_sharing: 'Enable file sharing for this exam',
+        unified_files: 'Unified Files (for this exam)',
+        no_unified_files: 'No unified files yet',
+        upload_unified_files: 'Upload Unified Files',
+        add_session: 'Add Exam Session',
+        session_name_th: 'Session Name (TH)',
+        session_name_en: 'Session Name (EN - Auto)',
+        announcement_th: 'Announcement (TH)',
+        announcement_en: 'Announcement (EN - Auto)',
+        subjects_info: 'Subjects / Additional Info',
+        subject_code: 'Subject Code (6 digits)',
+        subject_name: 'Subject Name',
+        folder_name: 'Folder Name',
+        file_access_pin: 'File Access PIN',
+        save_settings: 'Save Settings',
+        translate_all: 'Translate All (TH ➜ EN)',
+        uploading: 'Uploading...',
+        choose_file: 'Choose File',
+        no_announcements: 'No announcements yet',
+        add_announcement: 'Add New Announcement',
+        add_subject: 'Add New Subject',
+        no_subjects: 'No subjects yet',
+        file_name: 'File Name',
+        size: 'Size',
+        action: 'Action',
+        download: 'Download',
+        loading: 'Loading...',
+        delete_failed: 'Delete failed',
+        saving: 'Saving...',
+        confirm_delete: 'Confirm delete this file?',
+    }
+};
+
+interface LocaleContextType {
+    locale: Locale;
+    setLocale: (l: Locale) => void;
+    t: (key: keyof typeof translations.th) => string;
+}
+
+const LocaleContext = createContext<LocaleContextType | undefined>(undefined);
+
+export function LocaleProvider({ children }: { children: React.ReactNode }) {
+    const [locale, setLocale] = useState<Locale>('th');
+
+    useEffect(() => {
+        const saved = localStorage.getItem('locale') as Locale;
+        if (saved && (saved === 'th' || saved === 'en')) {
+            setLocale(saved);
+        }
+    }, []);
+
+    const handleSetLocale = (l: Locale) => {
+        setLocale(l);
+        localStorage.setItem('locale', l);
+    };
+
+    const t = (key: keyof typeof translations.th) => {
+        return translations[locale][key] || key;
+    };
+
+    return (
+        <LocaleContext.Provider value={{ locale, setLocale: handleSetLocale, t }}>
+            {children}
+        </LocaleContext.Provider>
+    );
+}
+
+export function useLocale() {
+    const context = useContext(LocaleContext);
+    if (!context) throw new Error('useLocale must be used within LocaleProvider');
+    return context;
+}
