@@ -33,8 +33,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
         accessCode: '',
         sessions: [],
         announcements: [],
-        subjects: [],
-        fileSharingEnabled: false
+        subjects: []
     });
 
     useEffect(() => {
@@ -46,7 +45,6 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                 sessions: exam.sessions || [],
                 announcements: exam.announcements || [],
                 subjects: exam.subjects || [],
-                fileSharingEnabled: exam.fileSharingEnabled || false,
                 accessCode: exam.accessCode || ''
             });
         }
@@ -66,10 +64,11 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
         setSaving(true);
         setSaveMsg('');
         try {
+            const { fileSharingEnabled, ...payload } = formData;
             const res = await fetch(`/api/exams/${id}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...formData, adminPinInput: pin })
+                body: JSON.stringify({ ...payload, adminPinInput: pin })
             });
 
             if (res.ok) {

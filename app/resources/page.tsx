@@ -69,7 +69,7 @@ export default function ResourcesIndexPage() {
 
                 const visibleExams = details
                     .filter((exam): exam is ExamSummary => !!exam)
-                    .filter((exam) => !!exam.fileSharingEnabled && (exam.files?.length || 0) > 0);
+                    .filter((exam) => (exam.files?.length || 0) > 0);
 
                 setExams(visibleExams);
             } catch (loadError) {

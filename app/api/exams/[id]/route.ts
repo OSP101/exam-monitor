@@ -62,25 +62,8 @@ export async function GET(
         if (!exam) {
             return NextResponse.json({ error: 'Exam not found' }, { status: 404 });
         }
-        // if file sharing is enabled, attach files list from data/<examId>/
-        const sharingEnabled = (exam as any).fileSharingEnabled || (exam as any).file_sharing_enabled;
-        if (sharingEnabled) {
-            try {
-                const files = listExamFiles(String(id));
-                const subjectsWithDocuments = exam.subjects.map((subject: any) => {
-                    const documentCount = countFilesInFolder(subject.folder);
-                    return {
-                        ...subject,
-                        documentCount,
-                        hasDocuments: documentCount > 0,
-                    };
-                });
-                return NextResponse.json({ ...exam, files, subjects: subjectsWithDocuments });
-            } catch (e) {
-                console.error('Error listing exam files:', e);
-                // fallthrough to return exam without files
-            }
-        }
+        const files = listExamFiles(String(id));
+        const sharingEnabled = !!((exam as any).fileSharingEnabled || (exam as any).file_sharing_enabled || files.length > 0);
         const subjectsWithDocuments = exam.subjects.map((subject: any) => {
             const documentCount = countFilesInFolder(subject.folder);
             return {
@@ -89,7 +72,7 @@ export async function GET(
                 hasDocuments: documentCount > 0,
             };
         });
-        return NextResponse.json({ ...exam, subjects: subjectsWithDocuments });
+        return NextResponse.json({ ...exam, fileSharingEnabled: sharingEnabled, files, subjects: subjectsWithDocuments });
     } catch (error) {
         console.error('Error fetching exam:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
