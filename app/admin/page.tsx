@@ -258,7 +258,7 @@ export default function AdminDashboard() {
                                         {t('time_monitor_view')}
                                     </Link>
                                     <Link
-                                        href={`/exam/${exam.id}`}
+                                        href={`/resources`}
                                         target="_blank"
                                         style={{
                                             display: 'flex',

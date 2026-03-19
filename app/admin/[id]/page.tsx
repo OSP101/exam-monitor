@@ -268,7 +268,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                         <Link href={`/time/${id}`} target="_blank" style={{ padding: '10px 20px', backgroundColor: 'rgba(59,130,246,0.1)', border: '1px solid #3b82f6', borderRadius: '8px', color: '#60a5fa', textDecoration: 'none', fontSize: '14px' }}>
                             {t('time_monitor_view')}
                         </Link>
-                        <Link href={`/exam/${id}`} target="_blank" style={{ padding: '10px 20px', backgroundColor: 'rgba(168,85,247,0.1)', border: '1px solid #a855f7', borderRadius: '8px', color: '#a855f7', textDecoration: 'none', fontSize: '14px' }}>
+                        <Link href={`/resources`} target="_blank" style={{ padding: '10px 20px', backgroundColor: 'rgba(168,85,247,0.1)', border: '1px solid #a855f7', borderRadius: '8px', color: '#a855f7', textDecoration: 'none', fontSize: '14px' }}>
                             {t('student_view')}
                         </Link>
                     </div>
