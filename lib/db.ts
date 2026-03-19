@@ -63,6 +63,22 @@ db.exec(`
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS file_assets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exam_id INTEGER NOT NULL,
+        stored_path TEXT NOT NULL UNIQUE,
+        folder TEXT NOT NULL DEFAULT '',
+        display_name TEXT NOT NULL,
+        mime_type TEXT DEFAULT '',
+        size INTEGER DEFAULT 0,
+        is_published INTEGER DEFAULT 0,
+        published_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (exam_id) REFERENCES exams(id) ON DELETE CASCADE
+    );
+
     -- Migration Logic: Create a default exam if total exams is 0
     -- This handles the transition from the old single-config system
 `);
@@ -98,6 +114,179 @@ ensureColumn('exams', 'student_pin', 'TEXT', '');
 ensureColumn('exams', 'title_en', 'TEXT', '');
 ensureColumn('sessions', 'name_en', 'TEXT', '');
 ensureColumn('announcements', 'content_en', 'TEXT', '');
+ensureColumn('file_assets', 'folder', 'TEXT', '');
+ensureColumn('file_assets', 'mime_type', 'TEXT', '');
+ensureColumn('file_assets', 'size', 'INTEGER', 0);
+ensureColumn('file_assets', 'is_published', 'INTEGER', 0);
+ensureColumn('file_assets', 'published_at', 'DATETIME', 'NULL');
+ensureColumn('file_assets', 'updated_at', 'DATETIME', 'CURRENT_TIMESTAMP');
+ensureColumn('file_assets', 'last_uploaded_at', 'DATETIME', 'CURRENT_TIMESTAMP');
+
+const normalizeStoredPath = (storedPath: string) => storedPath.replace(/\\/g, '/');
+
+const fileAssetExists = db.prepare('SELECT id FROM file_assets WHERE stored_path = ?');
+const insertFileAsset = db.prepare(`
+    INSERT INTO file_assets (
+        exam_id,
+        stored_path,
+        folder,
+        display_name,
+        mime_type,
+        size,
+        is_published,
+        published_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`);
+const updateFileAsset = db.prepare(`
+    UPDATE file_assets
+    SET
+        folder = ?,
+        display_name = ?,
+        mime_type = ?,
+        size = ?,
+        is_published = ?,
+        published_at = ?,
+        updated_at = CURRENT_TIMESTAMP,
+        last_uploaded_at = CURRENT_TIMESTAMP
+    WHERE stored_path = ?
+`);
+
+export type FileAssetRecord = {
+    id: number;
+    exam_id: number;
+    stored_path: string;
+    folder: string;
+    display_name: string;
+    mime_type: string;
+    size: number;
+    is_published: number;
+    published_at: string | null;
+    created_at: string;
+    updated_at: string;
+    last_uploaded_at: string;
+};
+
+export function upsertFileAsset(data: {
+    examId: number | string;
+    storedPath: string;
+    folder?: string | null;
+    displayName: string;
+    mimeType?: string | null;
+    size?: number | null;
+    isPublished?: boolean;
+    publishedAt?: string | null;
+}) {
+    const storedPath = normalizeStoredPath(data.storedPath);
+    const existing = fileAssetExists.get(storedPath) as { id: number } | undefined;
+    const publishedAt = data.isPublished
+        ? (data.publishedAt || new Date().toISOString())
+        : null;
+    const params = [
+        String(data.folder || ''),
+        data.displayName,
+        data.mimeType || '',
+        data.size || 0,
+        data.isPublished ? 1 : 0,
+        publishedAt,
+    ] as const;
+
+    if (existing) {
+        updateFileAsset.run(...params, storedPath);
+    } else {
+        insertFileAsset.run(
+            data.examId,
+            storedPath,
+            String(data.folder || ''),
+            data.displayName,
+            data.mimeType || '',
+            data.size || 0,
+            data.isPublished ? 1 : 0,
+            publishedAt
+        );
+    }
+}
+
+export function setFilePublishedState(storedPath: string, isPublished: boolean) {
+    const normalizedPath = normalizeStoredPath(storedPath);
+    db.prepare(`
+        UPDATE file_assets
+        SET
+            is_published = ?,
+            published_at = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE stored_path = ?
+    `).run(isPublished ? 1 : 0, isPublished ? new Date().toISOString() : null, normalizedPath);
+}
+
+export function getFileAssetByPath(storedPath: string) {
+    return db.prepare('SELECT * FROM file_assets WHERE stored_path = ?').get(normalizeStoredPath(storedPath)) as FileAssetRecord | undefined;
+}
+
+export function deleteFileAsset(storedPath: string) {
+    db.prepare('DELETE FROM file_assets WHERE stored_path = ?').run(normalizeStoredPath(storedPath));
+}
+
+export function listFileAssetsForExam(examId: number | string, options?: { includeUnpublished?: boolean }) {
+    const rows = db.prepare(`
+        SELECT *
+        FROM file_assets
+        WHERE exam_id = ?
+        ${options?.includeUnpublished ? '' : 'AND is_published = 1'}
+        ORDER BY
+            is_published DESC,
+            COALESCE(published_at, last_uploaded_at, created_at) DESC,
+            display_name COLLATE NOCASE ASC
+    `).all(examId) as FileAssetRecord[];
+
+    return rows.map((row) => ({
+        id: row.id,
+        name: row.display_name,
+        path: row.stored_path.replace(new RegExp(`^${examId}/`), ''),
+        fullPath: row.stored_path,
+        size: row.size,
+        mimeType: row.mime_type || '',
+        isPublished: !!row.is_published,
+        publishedAt: row.published_at,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        lastUploadedAt: row.last_uploaded_at,
+        folder: row.folder || '',
+        extension: path.extname(row.display_name).replace('.', '').toLowerCase()
+    }));
+}
+
+export function syncExamFilesToDb(examId: number | string, options?: { defaultPublished?: boolean }) {
+    const examDir = path.join(process.cwd(), 'data', String(examId));
+    if (!fs.existsSync(examDir)) return;
+
+    const walk = (dir: string) => {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+            const absolutePath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                walk(absolutePath);
+                continue;
+            }
+
+            const stat = fs.statSync(absolutePath);
+            const relFromExam = path.relative(examDir, absolutePath).replace(/\\/g, '/');
+            const storedPath = normalizeStoredPath(path.join(String(examId), relFromExam));
+            const existing = getFileAssetByPath(storedPath);
+            if (!existing) {
+                upsertFileAsset({
+                    examId,
+                    storedPath,
+                    folder: path.dirname(relFromExam) === '.' ? '' : path.dirname(relFromExam).replace(/\\/g, '/'),
+                    displayName: entry.name,
+                    size: stat.size,
+                    isPublished: options?.defaultPublished ?? true,
+                });
+            }
+        }
+    };
+
+    walk(examDir);
+}
 
 // Helper functions for Exams
 export function getAllExams() {
@@ -117,7 +306,7 @@ export function getExamById(id: number | string) {
         examTitle: exam.title,
         title_en: exam.title_en || '',
         adminPin: exam.admin_pin,
-        studentPin: exam.student_pin || '',
+        accessCode: exam.student_pin || '',
         fileSharingEnabled: !!exam.file_sharing_enabled,
         sessions: sessions.map((s: any) => ({
             id: s.id,
@@ -151,7 +340,16 @@ export function deleteExam(id: number | string) {
 
 export function updateExamConfig(id: number | string, data: any) {
     try {
-        const { examTitle, title_en, adminPin, studentPin, sessions, announcements, subjects } = data;
+        const {
+            examTitle,
+            title_en,
+            adminPin,
+            accessCode,
+            studentPin,
+            sessions,
+            announcements,
+            subjects
+        } = data;
 
         // Update main exam data
         if (examTitle !== undefined) {
@@ -163,8 +361,9 @@ export function updateExamConfig(id: number | string, data: any) {
         if (adminPin !== undefined) {
             db.prepare('UPDATE exams SET admin_pin = ? WHERE id = ?').run(adminPin, id);
         }
-        if (studentPin !== undefined) {
-            db.prepare('UPDATE exams SET student_pin = ? WHERE id = ?').run(studentPin, id);
+        const resolvedAccessCode = accessCode !== undefined ? accessCode : studentPin;
+        if (resolvedAccessCode !== undefined) {
+            db.prepare('UPDATE exams SET student_pin = ? WHERE id = ?').run(resolvedAccessCode, id);
         }
 
         // Wrap in transaction for sessions, ann, subjects

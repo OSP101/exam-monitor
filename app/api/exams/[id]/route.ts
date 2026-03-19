@@ -29,6 +29,29 @@ const listExamFiles = (examId: string) => {
     return results;
 };
 
+const countFilesInFolder = (folder: string) => {
+    const dataDir = path.resolve(process.cwd(), 'data');
+    const targetDir = path.resolve(dataDir, folder);
+    if (!targetDir.startsWith(dataDir) || !fs.existsSync(targetDir)) return 0;
+
+    let count = 0;
+    const walk = (dir: string) => {
+        const items = fs.readdirSync(dir, { withFileTypes: true });
+        for (const item of items) {
+            if (item.name.startsWith('.')) continue;
+            const itemPath = path.join(dir, item.name);
+            if (item.isDirectory()) {
+                walk(itemPath);
+            } else {
+                count += 1;
+            }
+        }
+    };
+
+    walk(targetDir);
+    return count;
+};
+
 export async function GET(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
@@ -44,13 +67,29 @@ export async function GET(
         if (sharingEnabled) {
             try {
                 const files = listExamFiles(String(id));
-                return NextResponse.json({ ...exam, files });
+                const subjectsWithDocuments = exam.subjects.map((subject: any) => {
+                    const documentCount = countFilesInFolder(subject.folder);
+                    return {
+                        ...subject,
+                        documentCount,
+                        hasDocuments: documentCount > 0,
+                    };
+                });
+                return NextResponse.json({ ...exam, files, subjects: subjectsWithDocuments });
             } catch (e) {
                 console.error('Error listing exam files:', e);
                 // fallthrough to return exam without files
             }
         }
-        return NextResponse.json(exam);
+        const subjectsWithDocuments = exam.subjects.map((subject: any) => {
+            const documentCount = countFilesInFolder(subject.folder);
+            return {
+                ...subject,
+                documentCount,
+                hasDocuments: documentCount > 0,
+            };
+        });
+        return NextResponse.json({ ...exam, subjects: subjectsWithDocuments });
     } catch (error) {
         console.error('Error fetching exam:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

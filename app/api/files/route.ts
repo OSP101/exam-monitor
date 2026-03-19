@@ -1,82 +1,162 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
+import { promises as fs } from 'fs';
 import path from 'path';
-import db from '@/lib/db';
+import mime from 'mime';
+import db, {
+    deleteFileAsset,
+    getAdminPinForExam,
+    listFileAssetsForExam,
+    logFileAction,
+    setFilePublishedState,
+    syncExamFilesToDb,
+    upsertFileAsset,
+} from '@/lib/db';
 
-// Helper to recursively get files
-const getFilesRecursively = (dir: string, baseDir: string, dataDir: string) => {
-    let results: any[] = [];
-    const list = fs.readdirSync(dir);
+const dataDir = path.resolve(process.cwd(), 'data');
+const mimeApi = (mime as any).getType ? (mime as any) : (mime as any).default;
 
-    list.forEach((file) => {
-        const filePath = path.join(dir, file);
-        const stat = fs.statSync(filePath);
+const getFilesRecursively = async (dir: string, baseDir: string): Promise<any[]> => {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    const nested = await Promise.all(entries.map(async (entry) => {
+        const filePath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            return getFilesRecursively(filePath, baseDir);
+        }
+
+        if (entry.name.startsWith('.')) {
+            return [];
+        }
+
+        const stat = await fs.stat(filePath);
         const relativePath = path.relative(baseDir, filePath).replace(/\\/g, '/');
         const fullPath = path.relative(dataDir, filePath).replace(/\\/g, '/');
 
-        if (stat && stat.isDirectory()) {
-            results = results.concat(getFilesRecursively(filePath, baseDir, dataDir));
-        } else {
-            // Filter out hidden files or specific system files if needed
-            if (!file.startsWith('.')) {
-                results.push({
-                    name: file,
-                    path: relativePath,
-                    fullPath,
-                    size: stat.size,
-                    type: 'file'
-                });
-            }
+        return [{
+            name: entry.name,
+            path: relativePath,
+            fullPath,
+            size: stat.size,
+            type: 'file',
+            mimeType: mimeApi.getType(filePath) || '',
+            isPublished: true,
+            publishedAt: stat.mtime.toISOString(),
+            updatedAt: stat.mtime.toISOString(),
+            lastUploadedAt: stat.mtime.toISOString(),
+            extension: path.extname(entry.name).replace('.', '').toLowerCase(),
+        }];
+    }));
+
+    return nested.flat();
+};
+
+const parseExamIdFromFolder = (folder: string) => {
+    if (/^\d+$/.test(folder)) {
+        return folder;
+    }
+    return null;
+};
+
+const verifyAdminPin = (examId: string, adminPin: string | null | undefined) => {
+    if (!adminPin) return false;
+    const masterPin = 'admin1234';
+    const currentAdminPin = getAdminPinForExam(examId);
+    return adminPin === masterPin || adminPin === currentAdminPin;
+};
+
+const getStoredPathFromRelative = (relPath: string) => path.resolve(dataDir, relPath);
+
+const getUploadPayload = async (request: Request) => {
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.includes('multipart/form-data')) {
+        const formData = await request.formData();
+        const file = formData.get('file');
+        if (!(file instanceof File)) {
+            return { error: 'file is required' as const };
         }
-    });
-    return results;
+
+        return {
+            folder: String(formData.get('folder') || ''),
+            filename: file.name,
+            adminPin: String(formData.get('adminPin') || ''),
+            publishNow: String(formData.get('publishNow') || 'false') === 'true',
+            buffer: Buffer.from(await file.arrayBuffer()),
+            mimeType: file.type || mimeApi.getType(file.name) || '',
+        };
+    }
+
+    const body = await request.json();
+    const { folder, filename, contentBase64, adminPin, publishNow } = body as any;
+    if (!contentBase64) {
+        return { error: 'contentBase64 is required' as const };
+    }
+
+    return {
+        folder: String(folder || ''),
+        filename: String(filename || ''),
+        adminPin: String(adminPin || ''),
+        publishNow: !!publishNow,
+        buffer: Buffer.from(contentBase64, 'base64'),
+        mimeType: mimeApi.getType(String(filename || '')) || '',
+    };
 };
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const folder = searchParams.get('folder');
+    const publishedOnly = searchParams.get('publishedOnly') === '1';
+    const includeUnpublished = searchParams.get('includeUnpublished') === '1';
+    const adminPin = searchParams.get('adminPin');
 
     if (!folder) {
         return NextResponse.json({ error: 'Folder parameter is required' }, { status: 400 });
     }
 
-    // Allow nested folders but ensure resolved path stays within data dir
-    const dataDir = path.resolve(process.cwd(), 'data');
+    const examId = parseExamIdFromFolder(folder);
+    if (examId) {
+        if (includeUnpublished && !verifyAdminPin(examId, adminPin)) {
+            return NextResponse.json({ error: 'Invalid admin PIN' }, { status: 401 });
+        }
+
+        syncExamFilesToDb(examId, { defaultPublished: true });
+        const files = listFileAssetsForExam(examId, {
+            includeUnpublished: includeUnpublished && verifyAdminPin(examId, adminPin),
+        });
+
+        return NextResponse.json({
+            files: publishedOnly ? files.filter((file) => file.isPublished) : files,
+        });
+    }
+
     let targetDir = path.resolve(dataDir, folder);
     if (!targetDir.startsWith(dataDir)) {
         return NextResponse.json({ error: 'Invalid folder path' }, { status: 400 });
     }
 
-    if (!fs.existsSync(targetDir)) {
-        // Try to resolve under exam subfolders: data/<examId>/<folder>
-        const candidates = fs.readdirSync(dataDir).filter((d) => {
-            try { return fs.statSync(path.join(dataDir, d)).isDirectory(); } catch { return false; }
-        });
-
-        let found = null as string | null;
-        for (const c of candidates) {
-            const tryPath = path.resolve(dataDir, c, folder);
-            if (tryPath.startsWith(dataDir) && fs.existsSync(tryPath) && fs.statSync(tryPath).isDirectory()) {
-                found = tryPath;
-                break;
-            }
-        }
-
-        if (!found) {
-            return NextResponse.json({ error: 'Folder not found' }, { status: 404 });
-        }
-
-        // use resolved path
-        // (targetDir used below)
-        // overwrite targetDir variable
-        // Note: keep targetDir inside dataDir
-        // eslint-disable-next-line no-unused-vars
-        // @ts-ignore
-        targetDir = found;
-    }
-
     try {
-        const files = getFilesRecursively(targetDir, targetDir, dataDir);
+        const stat = await fs.stat(targetDir).catch(() => null);
+        if (!stat || !stat.isDirectory()) {
+            const candidates = await fs.readdir(dataDir, { withFileTypes: true });
+            let found: string | null = null;
+
+            for (const candidate of candidates) {
+                if (!candidate.isDirectory()) continue;
+                const tryPath = path.resolve(dataDir, candidate.name, folder);
+                if (!tryPath.startsWith(dataDir)) continue;
+                const nestedStat = await fs.stat(tryPath).catch(() => null);
+                if (nestedStat?.isDirectory()) {
+                    found = tryPath;
+                    break;
+                }
+            }
+
+            if (!found) {
+                return NextResponse.json({ error: 'Folder not found' }, { status: 404 });
+            }
+
+            targetDir = found;
+        }
+
+        const files = await getFilesRecursively(targetDir, targetDir);
         return NextResponse.json({ files });
     } catch (error) {
         console.error('Error listing files:', error);
@@ -84,81 +164,135 @@ export async function GET(request: Request) {
     }
 }
 
-export async function DELETE(request: Request) {
-    try {
-        const body = await request.json();
-        const { path: relPath, adminPin } = body as any;
-        if (!relPath) return NextResponse.json({ error: 'path is required' }, { status: 400 });
-        if (!adminPin) return NextResponse.json({ error: 'adminPin is required' }, { status: 401 });
-
-        // Verify adminPin
-        const masterPin = 'admin1234';
-        const row = db.prepare('SELECT COUNT(*) as c FROM exams WHERE admin_pin = ?').get(adminPin) as any;
-        if (adminPin !== masterPin && (!row || row.c === 0)) return NextResponse.json({ error: 'Invalid admin PIN' }, { status: 401 });
-
-        const dataDir = path.resolve(process.cwd(), 'data');
-        const targetPath = path.resolve(dataDir, relPath);
-        if (!targetPath.startsWith(dataDir)) return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
-
-        if (!fs.existsSync(targetPath)) return NextResponse.json({ error: 'File not found' }, { status: 404 });
-
-        const stat = fs.statSync(targetPath);
-        if (stat.isDirectory()) return NextResponse.json({ error: 'Path is a directory' }, { status: 400 });
-
-        fs.unlinkSync(targetPath);
-        // log delete
-        try { db.prepare('INSERT INTO file_logs (exam_id, subject_folder, filename, action, admin_pin, ip) VALUES (?, ?, ?, ?, ?, ?)').run(null, null, path.relative(dataDir, targetPath), 'delete', adminPin, null); } catch (e) { console.error('log error', e); }
-        return NextResponse.json({ success: true });
-    } catch (error) {
-        console.error('Error deleting file:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
-    }
-}
-
 export async function POST(request: Request) {
     try {
-        const body = await request.json();
-        const { folder, filename, contentBase64, adminPin } = body as any;
-
-        if (!folder || !filename || !contentBase64) {
-            return NextResponse.json({ error: 'folder, filename and contentBase64 are required' }, { status: 400 });
+        const payload = await getUploadPayload(request);
+        if ('error' in payload) {
+            return NextResponse.json({ error: payload.error }, { status: 400 });
         }
 
-        // Basic validation to prevent traversal
+        const { folder, filename, adminPin, buffer, mimeType } = payload;
+
+        if (!folder || !filename || !buffer.length) {
+            return NextResponse.json({ error: 'folder, filename and file are required' }, { status: 400 });
+        }
+
         if (folder.includes('..') || folder.includes('/') || folder.includes('\\')) {
             return NextResponse.json({ error: 'Invalid folder path' }, { status: 400 });
         }
 
-        if (!adminPin) {
-            return NextResponse.json({ error: 'Admin PIN required' }, { status: 401 });
-        }
-
-        const masterPin = 'admin1234';
-        const examRow = db.prepare('SELECT id FROM exams WHERE admin_pin = ?').get(adminPin) as any;
-        if (adminPin !== masterPin && !examRow) {
+        const examId = parseExamIdFromFolder(folder);
+        if (examId && !verifyAdminPin(examId, adminPin)) {
             return NextResponse.json({ error: 'Invalid admin PIN' }, { status: 401 });
         }
 
-        const dataDir = path.join(process.cwd(), 'data');
-        const targetDir = path.join(dataDir, folder);
-        if (!fs.existsSync(targetDir)) {
-            fs.mkdirSync(targetDir, { recursive: true });
+        if (!examId) {
+            const masterPin = 'admin1234';
+            const row = db.prepare('SELECT COUNT(*) as c FROM exams WHERE admin_pin = ?').get(adminPin) as any;
+            if (adminPin !== masterPin && (!row || row.c === 0)) {
+                return NextResponse.json({ error: 'Invalid admin PIN' }, { status: 401 });
+            }
         }
 
+        const targetDir = path.join(dataDir, folder);
+        await fs.mkdir(targetDir, { recursive: true });
         const targetPath = path.join(targetDir, filename);
-        fs.writeFileSync(targetPath, Buffer.from(contentBase64, 'base64'));
+        await fs.writeFile(targetPath, buffer);
 
-        // log action (examId: try parse from folder root if pattern 'examId/...')
-        let examId: any = null;
-        const parts = folder.split(/\\|\//);
-        if (parts.length > 0 && /^\d+$/.test(parts[0])) examId = parts[0];
-        // subject folder is rest
-        const subjectFolder = parts.length > 1 ? parts.slice(1).join('/') : null;
-        try { db.prepare('INSERT INTO file_logs (exam_id, subject_folder, filename, action, admin_pin, ip) VALUES (?, ?, ?, ?, ?, ?)').run(examId, subjectFolder, filename, 'upload', adminPin, null); } catch (e) { console.error('log error', e); }
+        const fullPath = path.relative(dataDir, targetPath).replace(/\\/g, '/');
+        const subjectFolder = examId ? '' : folder;
 
-        return NextResponse.json({ success: true, path: path.relative(targetDir, targetPath).replace(/\\/g, '/'), fullPath: path.relative(dataDir, targetPath).replace(/\\/g, '/') });
+        if (examId) {
+            upsertFileAsset({
+                examId,
+                storedPath: fullPath,
+                folder: '',
+                displayName: filename,
+                mimeType,
+                size: buffer.length,
+                isPublished: true,
+            });
+            db.prepare('UPDATE exams SET file_sharing_enabled = 1 WHERE id = ?').run(examId);
+        }
+
+        logFileAction(examId, subjectFolder || null, filename, 'upload', adminPin, null);
+
+        return NextResponse.json({
+            success: true,
+            path: path.relative(targetDir, targetPath).replace(/\\/g, '/'),
+            fullPath,
+            size: buffer.length,
+            isPublished: true,
+        });
     } catch (error) {
         console.error('Error uploading file:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
+
+export async function PATCH(request: Request) {
+    try {
+        const body = await request.json();
+        const { path: relPath, adminPin, isPublished } = body as {
+            path?: string;
+            adminPin?: string;
+            isPublished?: boolean;
+        };
+
+        if (!relPath) {
+            return NextResponse.json({ error: 'path is required' }, { status: 400 });
+        }
+
+        const normalizedPath = relPath.replace(/\\/g, '/');
+        const examId = normalizedPath.split('/')[0];
+        if (!/^\d+$/.test(examId) || !verifyAdminPin(examId, adminPin)) {
+            return NextResponse.json({ error: 'Invalid admin PIN' }, { status: 401 });
+        }
+
+        setFilePublishedState(normalizedPath, !!isPublished);
+        logFileAction(examId, null, normalizedPath, isPublished ? 'publish' : 'unpublish', adminPin, null);
+
+        return NextResponse.json({ success: true, isPublished: !!isPublished });
+    } catch (error) {
+        console.error('Error updating file metadata:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
+
+export async function DELETE(request: Request) {
+    try {
+        const body = await request.json();
+        const { path: relPath, adminPin } = body as { path?: string; adminPin?: string };
+        if (!relPath) {
+            return NextResponse.json({ error: 'path is required' }, { status: 400 });
+        }
+
+        const normalizedPath = relPath.replace(/\\/g, '/');
+        const examId = normalizedPath.split('/')[0];
+        if (/^\d+$/.test(examId) && !verifyAdminPin(examId, adminPin)) {
+            return NextResponse.json({ error: 'Invalid admin PIN' }, { status: 401 });
+        }
+
+        const targetPath = getStoredPathFromRelative(normalizedPath);
+        if (!targetPath.startsWith(dataDir)) {
+            return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
+        }
+
+        const stat = await fs.stat(targetPath).catch(() => null);
+        if (!stat) {
+            return NextResponse.json({ error: 'File not found' }, { status: 404 });
+        }
+        if (stat.isDirectory()) {
+            return NextResponse.json({ error: 'Path is a directory' }, { status: 400 });
+        }
+
+        await fs.unlink(targetPath);
+        deleteFileAsset(normalizedPath);
+        logFileAction(/^\d+$/.test(examId) ? examId : null, null, normalizedPath, 'delete', adminPin, null);
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error('Error deleting file:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

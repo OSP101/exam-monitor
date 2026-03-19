@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, use, useRef } from 'react';
+import { useState, useEffect, use } from 'react';
 import useSWR from 'swr';
 import { Settings, Save, Lock, Megaphone, Clock, Plus, Trash2, ArrowLeft, FolderLock, ShieldCheck, Eye, EyeOff, Languages } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLocale } from '@/lib/LocaleContext';
+import ExamFilesManager from '@/components/ExamFilesManager';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -19,7 +20,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
     const [pin, setPin] = useState('');
     const [showLoginPin, setShowLoginPin] = useState(false);
     const [showAdminPin, setShowAdminPin] = useState(false);
-    const [showStudentPin, setShowStudentPin] = useState(false);
+    const [showAccessCode, setShowAccessCode] = useState(false);
     const [showSubjectPinIdx, setShowSubjectPinIdx] = useState<number | null>(null);
     const [errorMsg, setErrorMsg] = useState('');
     const [saving, setSaving] = useState(false);
@@ -29,20 +30,12 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
         examTitle: '',
         title_en: '',
         adminPin: '',
-        studentPin: '',
+        accessCode: '',
         sessions: [],
         announcements: [],
         subjects: [],
         fileSharingEnabled: false
     });
-
-    // Upload state
-    const [uploading, setUploading] = useState(false);
-    const [uploadMsg, setUploadMsg] = useState('');
-    // Files list state (exam-level)
-    const filesFolderParam = exam?.id ? `${exam.id}` : '';
-    const { data: filesList, mutate: mutateFiles } = useSWR(() => filesFolderParam ? `/api/files?folder=${encodeURIComponent(filesFolderParam)}` : null, fetcher);
-    const examFileInputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
         if (exam) {
@@ -54,7 +47,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                 announcements: exam.announcements || [],
                 subjects: exam.subjects || [],
                 fileSharingEnabled: exam.fileSharingEnabled || false,
-                studentPin: exam.studentPin || ''
+                accessCode: exam.accessCode || ''
             });
         }
     }, [exam]);
@@ -146,14 +139,6 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
         if (isNaN(d.getTime())) return '';
         return d.toISOString().slice(0, 16);
     };
-
-    // Helper to convert file to base64
-    const fileToBase64 = (file: File) => new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => { const result = reader.result as string; const b64 = result.split(',')[1]; resolve(b64); };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
 
     // Handlers
     const handleSessionChange = (idx: number, field: string, val: string) => {
@@ -332,26 +317,29 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                             </div>
                         </div>
                         <div>
-                            <label style={{ fontSize: '14px', color: '#facc15', display: 'block', marginBottom: '8px' }}>{t('student_pin_label')}</label>
+                            <label style={{ fontSize: '14px', color: '#facc15', display: 'block', marginBottom: '8px' }}>
+                                {locale === 'en' ? 'Access Code (for viewing documents)' : 'รหัสเข้าดูเอกสาร'}
+                            </label>
                             <div style={{ position: 'relative' }}>
                                 <input
-                                    type={showStudentPin ? "text" : "password"}
-                                    value={formData.studentPin}
-                                    onChange={(e) => setFormData({ ...formData, studentPin: e.target.value })}
+                                    type={showAccessCode ? "text" : "password"}
+                                    value={formData.accessCode}
+                                    onChange={(e) => setFormData({ ...formData, accessCode: e.target.value })}
                                     placeholder="e.g. 1234"
                                     style={{ width: '100%', padding: '12px', paddingRight: '45px', backgroundColor: '#0f172a', border: '1px solid #eab308', borderRadius: '8px', color: 'white', outline: 'none' }}
                                 />
                                 <button
                                     type="button"
-                                    onClick={() => setShowStudentPin(!showStudentPin)}
+                                    onClick={() => setShowAccessCode(!showAccessCode)}
                                     style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#ca8a04', cursor: 'pointer' }}
                                 >
-                                    {showStudentPin ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    {showAccessCode ? <EyeOff size={18} /> : <Eye size={18} />}
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
+                
 
                 {/* Section: Sessions */}
                 <div style={{ padding: '24px', backgroundColor: '#1e293b', borderRadius: '16px', border: '1px solid #334155', marginBottom: '24px' }}>
@@ -422,7 +410,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                 </div>
 
                 {/* Section: Subjects (Resources) */}
-                <div style={{ padding: '24px', backgroundColor: '#1e293b', borderRadius: '16px', border: '1px solid #334155', marginBottom: '24px' }}>
+                {/* <div style={{ padding: '24px', backgroundColor: '#1e293b', borderRadius: '16px', border: '1px solid #334155', marginBottom: '24px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
                         <h3 style={{ fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <FolderLock style={{ width: '18px', height: '18px', color: '#a855f7' }} /> {t('subjects_info')}
@@ -473,110 +461,9 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                             </div>
                         ))}
                     </div>
-                </div>
+                </div> */}
 
-                {/* Section: Files (exam-level) */}
-                <div style={{ padding: '24px', backgroundColor: '#1e293b', borderRadius: '16px', border: '1px solid #334155', marginBottom: '100px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Settings style={{ width: '18px', height: '18px', color: '#a855f7' }} /> {t('unified_files')}
-                        </h3>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <label style={{ fontSize: '13px', color: '#94a3b8' }}>{t('enable_file_sharing')}:</label>
-                            <input
-                                type="checkbox"
-                                checked={formData.fileSharingEnabled}
-                                onChange={(e) => setFormData({ ...formData, fileSharingEnabled: e.target.checked })}
-                                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                            />
-                        </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
-                        <button onClick={() => examFileInputRef.current?.click()} disabled={!formData.fileSharingEnabled || !isAuthenticated} style={{ padding: '8px 12px', background: 'linear-gradient(90deg,#0b1220,#111827)', border: '1px solid #2b3440', borderRadius: '8px', color: '#cbd5e1', cursor: (!formData.fileSharingEnabled || !isAuthenticated) ? 'not-allowed' : 'pointer' }}>
-                            {t('upload_unified_files')}
-                        </button>
-                        <input ref={examFileInputRef} type="file" multiple onChange={async (e) => {
-                            const files = Array.from(e.target.files || []);
-                            if (files.length === 0) return;
-                            if (!pin) { alert(t('prompt_admin_pin')); return; }
-                            let success = 0;
-                            let failed: string[] = [];
-                            try {
-                                setUploading(true);
-                                for (let i = 0; i < files.length; i++) {
-                                    const file = files[i];
-                                    setUploadMsg(`${t('uploading')} ${i + 1}/${files.length} : ${file.name}`);
-                                    try {
-                                        const b64 = await fileToBase64(file);
-                                        const res = await fetch('/api/files', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ folder: `${exam?.id}`, filename: file.name, contentBase64: b64, adminPin: pin })
-                                        });
-                                        if (res.ok) {
-                                            success++;
-                                        } else {
-                                            const data = await res.json();
-                                            failed.push(`${file.name}: ${data.error || 'failed'}`);
-                                        }
-                                    } catch (innerErr) {
-                                        console.error('upload file error', innerErr);
-                                        failed.push(`${file.name}: error`);
-                                    }
-                                }
-                                if (failed.length === 0) {
-                                    setUploadMsg(`${t('upload_complete')} ${success}/${files.length}`);
-                                } else {
-                                    setUploadMsg(`${t('uploading')} finished. Success ${success}/${files.length}. Errors: ${failed.join('; ')}`);
-                                }
-                                mutateFiles();
-                            } catch (err) {
-                                console.error(err);
-                                setUploadMsg(t('error_occurred'));
-                            } finally {
-                                setUploading(false);
-                            }
-                        }} style={{ display: 'none' }} />
-                        <div style={{ color: '#94a3b8', fontSize: '13px' }}>{uploading ? t('uploading') : (uploadMsg || '')}</div>
-                    </div>
-
-                    {!filesList && <div style={{ color: '#94a3b8' }}>{t('loading')}</div>}
-                    {filesList && filesList.files && filesList.files.length === 0 && <div style={{ color: '#94a3b8' }}>{t('no_unified_files')}</div>}
-                    {filesList && filesList.files && (
-                        <div style={{ overflowX: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                <thead>
-                                    <tr style={{ textAlign: 'left', borderBottom: '1px solid #172033' }}>
-                                        <th style={{ padding: '10px 8px' }}>{t('file_name')}</th>
-                                        <th style={{ padding: '10px 8px' }}>{t('size')}</th>
-                                        <th style={{ padding: '10px 8px' }}>{t('action')}</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filesList.files.map((f: any, idx: number) => (
-                                        <tr key={idx} style={{ borderBottom: '1px solid #0b1220' }}>
-                                            <td style={{ padding: '10px 8px' }}>
-                                                <a href={`/api/view/${encodeURIComponent(`${exam.id}/${f.path}`)}`} target="_blank" rel="noreferrer" style={{ color: '#60a5fa', textDecoration: 'underline' }}>{f.name}</a>
-                                            </td>
-                                            <td style={{ padding: '10px 8px' }}>{(f.size / 1024).toFixed(1)} KB</td>
-                                            <td style={{ padding: '10px 8px' }}>
-                                                <a href={`/api/files/download?path=${encodeURIComponent(`${exam.id}/${f.path}`)}`} target="_blank" rel="noreferrer" style={{ marginRight: '8px', color: '#60a5fa' }}>{t('download')}</a>
-                                                <button onClick={async () => {
-                                                    if (!confirm(t('confirm_delete'))) return;
-                                                    try {
-                                                        const res = await fetch('/api/files', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: `${exam.id}/${f.path}`, adminPin: pin }) });
-                                                        if (res.ok) { mutateFiles(); } else { const data = await res.json(); alert(data.error || t('delete_failed')); }
-                                                    } catch (e) { console.error(e); }
-                                                }} style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer' }}>{t('delete')}</button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </div>
+                <ExamFilesManager examId={String(exam.id)} adminPin={pin} />
 
                 {/* Floating Save Button */}
                 <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '20px', backgroundColor: 'rgba(15,23,42,0.9)', borderTop: '1px solid #334155', display: 'flex', justifyContent: 'center', gap: '20px', zIndex: 100 }}>
@@ -596,3 +483,4 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
         </div>
     );
 }
+
