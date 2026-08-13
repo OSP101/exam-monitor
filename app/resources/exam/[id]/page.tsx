@@ -14,8 +14,6 @@ const formatBytes = (bytes: number) => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const getAccessCode = (config: any) => String(config?.accessCode ?? '');
-
 export default function ExamResourcesPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const { locale, setLocale } = useLocale();
@@ -37,7 +35,7 @@ export default function ExamResourcesPage({ params }: { params: Promise<{ id: st
             return;
         }
 
-        const hasPin = !!getAccessCode(config).trim();
+        const hasPin = !!config?.hasAccessCode;
         const hasAccess = sessionStorage.getItem(`access_exam_${id}`) === 'true';
 
         setAuthorized(!hasPin || hasAccess);
@@ -67,18 +65,27 @@ export default function ExamResourcesPage({ params }: { params: Promise<{ id: st
         return files.filter((file: any) => String(file.name || '').toLowerCase().includes(normalizedQuery));
     }, [filesData?.files, query]);
 
-    const handlePinSubmit = (event: React.FormEvent) => {
+    const handlePinSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!config) {
             return;
         }
 
-        if (pin === getAccessCode(config)) {
-            sessionStorage.setItem(`access_exam_${id}`, 'true');
-            setAuthorized(true);
-            setPin('');
-            setPinError('');
-            return;
+        try {
+            const res = await fetch(`/api/exams/${id}/verify-access`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accessCode: pin })
+            });
+            if (res.ok) {
+                sessionStorage.setItem(`access_exam_${id}`, 'true');
+                setAuthorized(true);
+                setPin('');
+                setPinError('');
+                return;
+            }
+        } catch (error) {
+            console.error('Failed to verify access code', error);
         }
 
         setPinError(locale === 'en' ? 'Incorrect access code' : 'รหัสเข้าดูเอกสารไม่ถูกต้อง');

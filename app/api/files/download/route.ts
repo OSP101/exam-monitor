@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import path from 'path';
 import fs from 'fs';
 import mime from 'mime';
-import db, { getAdminPinForExam, getFileAssetByPath } from '@/lib/db';
+import db, { examExists, getFileAssetByPath } from '@/lib/db';
+import { verifyAdminPin } from '@/lib/auth';
 const mimeApi = (mime as any).getType ? (mime as any) : (mime as any).default;
 
 export async function GET(request: Request) {
@@ -23,8 +24,11 @@ export async function GET(request: Request) {
         const normalizedPath = relPath.replace(/\\/g, '/');
         const examId = normalizedPath.split('/')[0];
         if (/^\d+$/.test(examId)) {
+            if (!examExists(examId)) {
+                return NextResponse.json({ error: 'File not found' }, { status: 404 });
+            }
             const fileAsset = getFileAssetByPath(normalizedPath);
-            const isAdmin = adminPin && (adminPin === 'admin1234' || adminPin === getAdminPinForExam(examId));
+            const isAdmin = verifyAdminPin(request, examId, adminPin);
             if (fileAsset && !fileAsset.is_published && !isAdmin) {
                 return NextResponse.json({ error: 'File not published' }, { status: 403 });
             }

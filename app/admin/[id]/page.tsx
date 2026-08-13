@@ -16,7 +16,6 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
     const router = useRouter();
     const { locale, setLocale, t } = useLocale();
 
-    const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [pin, setPin] = useState('');
     const [showLoginPin, setShowLoginPin] = useState(false);
     const [showAdminPin, setShowAdminPin] = useState(false);
@@ -50,13 +49,24 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
         }
     }, [exam]);
 
-    const handleLogin = (e: React.FormEvent) => {
+    const isAuthenticated = !!exam?.adminPin;
+
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (exam && pin === exam.adminPin) {
-            setIsAuthenticated(true);
-            setErrorMsg('');
-        } else {
-            setErrorMsg(t('incorrect_pin'));
+        setErrorMsg('');
+        try {
+            const res = await fetch('/api/admin/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ adminPin: pin })
+            });
+            if (res.ok) {
+                mutate();
+            } else {
+                setErrorMsg(t('incorrect_pin'));
+            }
+        } catch {
+            setErrorMsg(t('error_occurred'));
         }
     };
 

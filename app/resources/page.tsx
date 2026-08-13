@@ -11,7 +11,7 @@ type ExamSummary = {
     title?: string;
     examTitle?: string;
     title_en?: string;
-    accessCode?: string | number | null;
+    hasAccessCode?: boolean;
     fileSharingEnabled?: boolean;
     files?: Array<{ name: string }>;
 };
@@ -23,8 +23,6 @@ const getExamTitle = (exam: ExamSummary, locale: 'th' | 'en') => {
 
     return exam.examTitle || exam.title || `Exam ${exam.id}`;
 };
-
-const getAccessCode = (exam: ExamSummary) => String(exam.accessCode ?? '');
 
 export default function ResourcesIndexPage() {
     const router = useRouter();
@@ -111,7 +109,7 @@ export default function ResourcesIndexPage() {
     };
 
     const handleExamClick = (exam: ExamSummary) => {
-        if (getAccessCode(exam).trim()) {
+        if (exam.hasAccessCode) {
             setSelectedExam(exam);
             setPin('');
             setShowPin(false);
@@ -122,15 +120,24 @@ export default function ResourcesIndexPage() {
         openExam(exam);
     };
 
-    const handlePinSubmit = (event: React.FormEvent) => {
+    const handlePinSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!selectedExam) {
             return;
         }
 
-        if (pin === getAccessCode(selectedExam)) {
-            openExam(selectedExam);
-            return;
+        try {
+            const res = await fetch(`/api/exams/${selectedExam.id}/verify-access`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accessCode: pin })
+            });
+            if (res.ok) {
+                openExam(selectedExam);
+                return;
+            }
+        } catch (error) {
+            console.error('Failed to verify access code', error);
         }
 
         setPinError(locale === 'en' ? 'Incorrect access code' : 'รหัสเข้าดูเอกสารไม่ถูกต้อง');
@@ -263,7 +270,7 @@ export default function ResourcesIndexPage() {
                                 </div>
                                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#1d4ed8', fontWeight: 700 }}>
                                     <FileText style={{ width: '16px', height: '16px' }} />
-                                    {getAccessCode(exam).trim()
+                                    {exam.hasAccessCode
                                         ? (locale === 'en' ? 'Enter access code to open' : 'กรอกรหัสก่อนเปิดเอกสาร')
                                         : (locale === 'en' ? 'Open documents' : 'เปิดเอกสาร')}
                                 </div>

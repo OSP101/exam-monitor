@@ -11,6 +11,9 @@ if (!fs.existsSync(dataDir)) {
 const dbPath = path.join(dataDir, 'exam-monitor.db');
 const db = new Database(dbPath);
 
+// Enforce foreign key constraints (ON DELETE CASCADE on file_assets etc.)
+db.pragma('foreign_keys = ON');
+
 // Initialize tables
 db.exec(`
     CREATE TABLE IF NOT EXISTS exams (
@@ -335,7 +338,31 @@ export function createExam(title: string, adminPin: string = 'admin1234') {
 }
 
 export function deleteExam(id: number | string) {
-    return db.prepare('DELETE FROM exams WHERE id = ?').run(id);
+    const transaction = db.transaction(() => {
+        db.prepare('DELETE FROM sessions WHERE exam_id = ?').run(id);
+        db.prepare('DELETE FROM announcements WHERE exam_id = ?').run(id);
+        db.prepare('DELETE FROM subjects WHERE exam_id = ?').run(id);
+        db.prepare('DELETE FROM file_assets WHERE exam_id = ?').run(id);
+        db.prepare('DELETE FROM file_logs WHERE exam_id = ?').run(id);
+        db.prepare('DELETE FROM exams WHERE id = ?').run(id);
+    });
+    transaction();
+
+    // Remove the exam's on-disk folder so deleted exams' files are no longer served
+    const examDir = path.join(process.cwd(), 'data', String(id));
+    try {
+        if (fs.existsSync(examDir)) {
+            fs.rmSync(examDir, { recursive: true, force: true });
+            console.log(`Removed exam folder: ${examDir}`);
+        }
+    } catch (e) {
+        console.error(`Failed to remove exam folder ${examDir}:`, e);
+    }
+}
+
+export function examExists(id: number | string) {
+    const row = db.prepare('SELECT 1 FROM exams WHERE id = ?').get(id);
+    return !!row;
 }
 
 export function updateExamConfig(id: number | string, data: any) {

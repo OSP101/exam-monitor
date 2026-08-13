@@ -4,13 +4,14 @@ import path from 'path';
 import mime from 'mime';
 import db, {
     deleteFileAsset,
-    getAdminPinForExam,
+    examExists,
     listFileAssetsForExam,
     logFileAction,
     setFilePublishedState,
     syncExamFilesToDb,
     upsertFileAsset,
 } from '@/lib/db';
+import { verifyAdminPin, verifyAnyAdminPin } from '@/lib/auth';
 
 const dataDir = path.resolve(process.cwd(), 'data');
 const mimeApi = (mime as any).getType ? (mime as any) : (mime as any).default;
@@ -54,13 +55,6 @@ const parseExamIdFromFolder = (folder: string) => {
         return folder;
     }
     return null;
-};
-
-const verifyAdminPin = (examId: string, adminPin: string | null | undefined) => {
-    if (!adminPin) return false;
-    const masterPin = 'admin1234';
-    const currentAdminPin = getAdminPinForExam(examId);
-    return adminPin === masterPin || adminPin === currentAdminPin;
 };
 
 const getStoredPathFromRelative = (relPath: string) => path.resolve(dataDir, relPath);
@@ -113,13 +107,17 @@ export async function GET(request: Request) {
 
     const examId = parseExamIdFromFolder(folder);
     if (examId) {
-        if (includeUnpublished && !verifyAdminPin(examId, adminPin)) {
+        if (!examExists(examId)) {
+            return NextResponse.json({ error: 'Exam not found' }, { status: 404 });
+        }
+
+        if (includeUnpublished && !verifyAdminPin(request, examId, adminPin)) {
             return NextResponse.json({ error: 'Invalid admin PIN' }, { status: 401 });
         }
 
         syncExamFilesToDb(examId, { defaultPublished: true });
         const files = listFileAssetsForExam(examId, {
-            includeUnpublished: includeUnpublished && verifyAdminPin(examId, adminPin),
+            includeUnpublished: includeUnpublished && verifyAdminPin(request, examId, adminPin),
         });
 
         return NextResponse.json({
@@ -182,16 +180,12 @@ export async function POST(request: Request) {
         }
 
         const examId = parseExamIdFromFolder(folder);
-        if (examId && !verifyAdminPin(examId, adminPin)) {
+        if (examId && !verifyAdminPin(request, examId, adminPin)) {
             return NextResponse.json({ error: 'Invalid admin PIN' }, { status: 401 });
         }
 
-        if (!examId) {
-            const masterPin = 'admin1234';
-            const row = db.prepare('SELECT COUNT(*) as c FROM exams WHERE admin_pin = ?').get(adminPin) as any;
-            if (adminPin !== masterPin && (!row || row.c === 0)) {
-                return NextResponse.json({ error: 'Invalid admin PIN' }, { status: 401 });
-            }
+        if (!examId && !verifyAnyAdminPin(request, adminPin)) {
+            return NextResponse.json({ error: 'Invalid admin PIN' }, { status: 401 });
         }
 
         const targetDir = path.join(dataDir, folder);
@@ -245,7 +239,7 @@ export async function PATCH(request: Request) {
 
         const normalizedPath = relPath.replace(/\\/g, '/');
         const examId = normalizedPath.split('/')[0];
-        if (!/^\d+$/.test(examId) || !verifyAdminPin(examId, adminPin)) {
+        if (!/^\d+$/.test(examId) || !verifyAdminPin(request, examId, adminPin)) {
             return NextResponse.json({ error: 'Invalid admin PIN' }, { status: 401 });
         }
 
@@ -269,7 +263,7 @@ export async function DELETE(request: Request) {
 
         const normalizedPath = relPath.replace(/\\/g, '/');
         const examId = normalizedPath.split('/')[0];
-        if (/^\d+$/.test(examId) && !verifyAdminPin(examId, adminPin)) {
+        if (/^\d+$/.test(examId) && !verifyAdminPin(request, examId, adminPin)) {
             return NextResponse.json({ error: 'Invalid admin PIN' }, { status: 401 });
         }
 

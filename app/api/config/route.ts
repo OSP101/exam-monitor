@@ -1,15 +1,20 @@
 import { NextResponse } from 'next/server';
-import { getExamById, updateExamConfig, getAdminPinForExam } from '@/lib/db';
+import { getExamById, updateExamConfig } from '@/lib/db';
+import { verifyAdminPin } from '@/lib/auth';
+import { toPublicExam } from '@/lib/exam-serializer';
 
 // This legacy route will now just point to the first exam (id 1) 
 // to prevent breaking anything that still calls /api/config
 const DEFAULT_EXAM_ID = 1;
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const config = getExamById(DEFAULT_EXAM_ID);
     if (!config) {
       return NextResponse.json({ error: 'Default exam not found' }, { status: 404 });
+    }
+    if (!verifyAdminPin(request, DEFAULT_EXAM_ID)) {
+      return NextResponse.json(toPublicExam(config));
     }
     return NextResponse.json(config);
   } catch (error) {
@@ -24,9 +29,7 @@ export async function POST(request: Request) {
     const { adminPin, ...newConfig } = body;
 
     // Security Check
-    const currentAdminPin = getAdminPinForExam(DEFAULT_EXAM_ID);
-    const masterPin = 'admin1234';
-    if (adminPin !== currentAdminPin && adminPin !== masterPin) {
+    if (!verifyAdminPin(request, DEFAULT_EXAM_ID, adminPin)) {
       return NextResponse.json({ error: 'Invalid Admin PIN' }, { status: 401 });
     }
 

@@ -27,14 +27,23 @@ export default function ExamSubjectsPage({ params }: { params: Promise<{ id: str
         setErrorMsg('');
     };
 
-    const handlePinSubmit = (event: React.FormEvent) => {
+    const handlePinSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!selectedSubject) return;
 
-        if (pin === selectedSubject.pin) {
-            sessionStorage.setItem(`access_${id}_${selectedSubject.folder}`, 'true');
-            router.push(`/resources/${selectedSubject.folder}?exam=${id}`);
-            return;
+        try {
+            const res = await fetch(`/api/exams/${id}/verify-access`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folder: selectedSubject.folder, pin })
+            });
+            if (res.ok) {
+                sessionStorage.setItem(`access_${id}_${selectedSubject.folder}`, 'true');
+                router.push(`/resources/${selectedSubject.folder}?exam=${id}`);
+                return;
+            }
+        } catch (error) {
+            console.error('Failed to verify subject PIN', error);
         }
 
         setErrorMsg(locale === 'en' ? 'Incorrect PIN' : 'รหัสไม่ถูกต้อง');

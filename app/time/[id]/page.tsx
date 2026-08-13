@@ -107,13 +107,23 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
         return () => clearInterval(timer);
     }, [currentSession]);
 
-    const handleUnlock = (e: React.FormEvent) => {
+    const handleUnlock = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (config && pin === config.adminPin) {
-            setIsLocked(false);
-            setErrorMsg('');
-            setPin('');
-        } else {
+        try {
+            const res = await fetch('/api/admin/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ adminPin: pin, examId: id })
+            });
+            if (res.ok) {
+                setIsLocked(false);
+                setErrorMsg('');
+                setPin('');
+            } else {
+                setErrorMsg(t('incorrect_pin'));
+                setPin('');
+            }
+        } catch {
             setErrorMsg(t('incorrect_pin'));
             setPin('');
         }

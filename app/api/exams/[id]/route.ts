@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { getExamById, updateExamConfig, deleteExam, getAdminPinForExam } from '@/lib/db';
+import { getExamById, updateExamConfig, deleteExam } from '@/lib/db';
+import { isAdminAuthenticated, verifyAdminPin } from '@/lib/auth';
+import { toPublicExam } from '@/lib/exam-serializer';
 
 // small helper to list files for an exam folder
 const listExamFiles = (examId: string) => {
@@ -72,7 +74,12 @@ export async function GET(
                 hasDocuments: documentCount > 0,
             };
         });
-        return NextResponse.json({ ...exam, fileSharingEnabled: sharingEnabled, files, subjects: subjectsWithDocuments });
+
+        const fullExam = { ...exam, fileSharingEnabled: sharingEnabled, files, subjects: subjectsWithDocuments };
+        if (isAdminAuthenticated(request)) {
+            return NextResponse.json(fullExam);
+        }
+        return NextResponse.json(toPublicExam(fullExam));
     } catch (error) {
         console.error('Error fetching exam:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -88,10 +95,8 @@ export async function POST(
         const body = await request.json();
         const { adminPinInput, ...updateData } = body;
 
-        // Security Check
-        const currentAdminPin = getAdminPinForExam(id);
-        const masterPin = 'admin1234';
-        if (adminPinInput !== currentAdminPin && adminPinInput !== masterPin) {
+        // Security Check: valid admin session OR valid PIN
+        if (!verifyAdminPin(request, id, adminPinInput)) {
             return NextResponse.json({ error: 'Invalid Admin PIN' }, { status: 401 });
         }
 
@@ -124,9 +129,7 @@ export async function DELETE(
         const headerPin = request.headers.get('x-admin-pin');
         const adminPinInput = bodyPin || headerPin;
 
-        const currentAdminPin = getAdminPinForExam(id);
-        const masterPin = 'admin1234';
-        if (!adminPinInput || (adminPinInput !== currentAdminPin && adminPinInput !== masterPin)) {
+        if (!verifyAdminPin(request, id, adminPinInput)) {
             return NextResponse.json({ error: 'Invalid Admin PIN' }, { status: 401 });
         }
 

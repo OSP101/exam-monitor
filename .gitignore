@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local runtime data (SQLite DB + uploaded exam files) - keep on server volume
+/data
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

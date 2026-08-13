@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import { Settings, Plus, Layout, ExternalLink, Trash2, Clock, Users, Eye, EyeOff, Monitor, CheckSquare, Square } from 'lucide-react';
 import Link from 'next/link';
@@ -14,10 +14,26 @@ export default function AdminDashboard() {
     const [newTitle, setNewTitle] = useState('');
     const [isCreating, setIsCreating] = useState(false);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [sessionChecked, setSessionChecked] = useState(false);
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
     const [pin, setPin] = useState('');
     const [showPin, setShowPin] = useState(false);
     const [authError, setAuthError] = useState('');
+
+    useEffect(() => {
+        fetch('/api/admin/verify')
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.ok) setIsAuthenticated(true);
+            })
+            .catch(() => {})
+            .finally(() => setSessionChecked(true));
+    }, []);
+
+    const handleLogout = async () => {
+        await fetch('/api/admin/logout', { method: 'POST' });
+        setIsAuthenticated(false);
+    };
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -68,6 +84,14 @@ export default function AdminDashboard() {
     };
 
     if (!isAuthenticated) {
+        if (!sessionChecked) {
+            return (
+                <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f172a' }}>
+                    <div style={{ width: '48px', height: '48px', border: '4px solid #3b82f6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                </div>
+            );
+        }
         return (
             <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f172a' }}>
                 <div style={{ backgroundColor: '#1e293b', padding: '32px', borderRadius: '16px', maxWidth: '420px', width: '100%', border: '1px solid #334155', textAlign: 'center' }}>
@@ -142,6 +166,12 @@ export default function AdminDashboard() {
                         >
                             {t('home')}
                         </Link>
+                        <button
+                            onClick={handleLogout}
+                            style={{ color: '#94a3b8', backgroundColor: 'transparent', border: '1px solid #334155', padding: '10px 16px', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}
+                        >
+                            {t('logout')}
+                        </button>
                     </div>
                 </div>
 
