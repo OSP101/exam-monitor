@@ -75,7 +75,7 @@ export async function GET(
             };
         });
 
-        const fullExam = { ...exam, fileSharingEnabled: sharingEnabled, files, subjects: subjectsWithDocuments };
+        const fullExam = { ...exam, fileSharingEnabled: sharingEnabled, files, subjects: subjectsWithDocuments, serverTime: Date.now() };
         if (isAdminAuthenticated(request)) {
             return NextResponse.json(fullExam);
         }

@@ -89,6 +89,10 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                     mutate(); // Second revalidation just in case
                     setSaveMsg('');
                 }, 3000);
+            } else if (res.status === 401) {
+                // Session expired or PIN rejected -> refetch so the login screen shows again
+                setSaveMsg('');
+                mutate();
             } else {
                 const data = await res.json();
                 setSaveMsg(data.error || t('save_failed'));
@@ -472,7 +476,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                     </div>
                 </div> */}
 
-                <ExamFilesManager examId={String(exam.id)} adminPin={pin} />
+                <ExamFilesManager examId={String(exam.id)} adminPin={pin} onUnauthorized={() => mutate()} />
 
                 {/* Floating Save Button */}
                 <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '20px', backgroundColor: 'rgba(15,23,42,0.9)', borderTop: '1px solid #334155', display: 'flex', justifyContent: 'center', gap: '20px', zIndex: 100 }}>

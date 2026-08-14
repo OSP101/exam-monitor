@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 
 // Ensure data directory exists
 const dataDir = path.join(process.cwd(), 'data');
@@ -332,8 +333,11 @@ export function getExamById(id: number | string) {
     };
 }
 
-export function createExam(title: string, adminPin: string = 'admin1234') {
-    const result = db.prepare('INSERT INTO exams (title, admin_pin) VALUES (?, ?)').run(title, adminPin);
+export function createExam(title: string, adminPin?: string) {
+    const generatedPin = adminPin && adminPin.trim() !== ''
+        ? adminPin
+        : String(crypto.randomInt(100000, 1000000));
+    const result = db.prepare('INSERT INTO exams (title, admin_pin) VALUES (?, ?)').run(title, generatedPin);
     return result.lastInsertRowid;
 }
 

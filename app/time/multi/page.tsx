@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useEffect, useMemo } from 'react';
+import { Suspense, useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import Link from 'next/link';
@@ -37,13 +37,20 @@ function ExamMonitorCell({ id }: { id: string }) {
     const [sessionTimes, setSessionTimes] = useState<{ start: string, end: string } | null>(null);
     const [currentTimeStr, setCurrentTimeStr] = useState('');
 
+    // Server/client clock offset (ms)
+    const serverOffsetRef = useRef(0);
+    useEffect(() => {
+        if (typeof config?.serverTime === 'number') {
+            serverOffsetRef.current = config.serverTime - Date.now();
+        }
+    }, [config]);
+
     useEffect(() => {
         const calculate = () => {
-            const now = new Date();
-            const nowTime = now.getTime();
+            const nowTime = Date.now() + serverOffsetRef.current;
 
             // Update current time string
-            setCurrentTimeStr(now.toLocaleTimeString(locale === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+            setCurrentTimeStr(new Date(nowTime).toLocaleTimeString(locale === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
 
             if (!config?.sessions) return;
 

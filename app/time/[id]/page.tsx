@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, useRef, use } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { Settings, Lock, Unlock, Shield, Megaphone, ArrowLeft, Languages } from 'lucide-react';
@@ -14,6 +14,15 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
     const { data: config } = useSWR(`/api/exams/${id}`, fetcher, { refreshInterval: 3000 });
     const { locale, setLocale, t } = useLocale();
 
+    // Server/client clock offset (ms) so the countdown matches the server even
+    // if the projector machine's clock is wrong.
+    const serverOffsetRef = useRef(0);
+    useEffect(() => {
+        if (typeof config?.serverTime === 'number') {
+            serverOffsetRef.current = config.serverTime - Date.now();
+        }
+    }, [config]);
+
     const [isLocked, setIsLocked] = useState(true);
     const [pin, setPin] = useState('');
     const [errorMsg, setErrorMsg] = useState('');
@@ -26,7 +35,7 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
     // Helper to find the best session to display based on current time
     const getActiveSessionIndex = (sessions: any[]) => {
         if (!sessions || sessions.length === 0) return 0;
-        const now = new Date().getTime();
+        const now = Date.now() + serverOffsetRef.current;
 
         // 1. Try to find a session that is CURRENTLY RUNNING
         let idx = sessions.findIndex((s: any) => {
@@ -63,7 +72,7 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
         if (!currentSession) return;
 
         const calculateTime = () => {
-            const now = new Date().getTime();
+            const now = Date.now() + serverOffsetRef.current;
 
             // Re-check if we should be on a different session (automatic transition)
             if (config?.sessions) {
@@ -99,7 +108,7 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
             }
 
             // Update current time
-            setCurrentTime(new Date().toLocaleTimeString(locale === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+            setCurrentTime(new Date(now).toLocaleTimeString(locale === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
         };
 
         calculateTime();
@@ -120,7 +129,8 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                 setErrorMsg('');
                 setPin('');
             } else {
-                setErrorMsg(t('incorrect_pin'));
+                const data = await res.json().catch(() => null);
+                setErrorMsg(data?.error || t('incorrect_pin'));
                 setPin('');
             }
         } catch {

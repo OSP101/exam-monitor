@@ -11,3 +11,8 @@ services:
       - /opt/exam-monitor/data:/app/data
     environment:
       - NODE_ENV=production
+      # REQUIRED: master admin PIN and session signing secret.
+      # Set these in a .env file next to docker-compose.yml (see .env.example).
+      # Without them the app falls back to insecure defaults.
+      - ADMIN_MASTER_PIN=${ADMIN_MASTER_PIN}
+      - ADMIN_SESSION_SECRET=${ADMIN_SESSION_SECRET}

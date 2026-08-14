@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getMasterPin, isAdminAuthenticated, buildSessionCookie } from '@/lib/auth';
+import { clearAttempts, getClientIp, isRateLimited, recordFailedAttempt } from '@/lib/rate-limit';
 
 export async function GET(request: Request) {
     return NextResponse.json({ ok: isAdminAuthenticated(request) });
@@ -13,6 +14,12 @@ export async function POST(request: Request) {
 
         if (!adminPin) {
             return NextResponse.json({ error: 'adminPin is required' }, { status: 400 });
+        }
+
+        const ip = getClientIp(request);
+        const rateKey = `verify:${ip}:${examId ? String(examId) : 'admin'}`;
+        if (isRateLimited(rateKey)) {
+            return NextResponse.json({ ok: false, error: 'Too many failed attempts. Try again later.' }, { status: 429 });
         }
 
         const masterPin = getMasterPin();
@@ -29,6 +36,7 @@ export async function POST(request: Request) {
         }
 
         if (ok) {
+            clearAttempts(rateKey);
             const res = NextResponse.json({ ok: true });
             // Scoped checks (time monitor unlock) do not grant a full admin session.
             if (!examId) {
@@ -37,6 +45,7 @@ export async function POST(request: Request) {
             return res;
         }
 
+        recordFailedAttempt(rateKey);
         return NextResponse.json({ ok: false }, { status: 401 });
     } catch (error) {
         console.error('Error verifying admin pin:', error);

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { clearAttempts, getClientIp, isRateLimited, recordFailedAttempt } from '@/lib/rate-limit';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -12,8 +13,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             return NextResponse.json({ error: 'Exam not found' }, { status: 404 });
         }
 
+        const ip = getClientIp(request);
+        const rateKey = `access:${ip}:${id}`;
+        if (isRateLimited(rateKey)) {
+            return NextResponse.json({ ok: false, error: 'Too many failed attempts. Try again later.' }, { status: 429 });
+        }
+
         if (typeof accessCode === 'string') {
             const valid = exam.student_pin && String(exam.student_pin).trim() === accessCode.trim();
+            if (!valid) recordFailedAttempt(rateKey);
+            else clearAttempts(rateKey);
             return valid
                 ? NextResponse.json({ ok: true })
                 : NextResponse.json({ ok: false }, { status: 401 });
@@ -24,6 +33,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 .prepare('SELECT pin FROM subjects WHERE exam_id = ? AND folder = ?')
                 .get(id, folder) as any;
             const valid = subject && subject.pin && String(subject.pin).trim() === pin.trim();
+            if (!valid) recordFailedAttempt(rateKey);
+            else clearAttempts(rateKey);
             return valid
                 ? NextResponse.json({ ok: true })
                 : NextResponse.json({ ok: false }, { status: 401 });

@@ -4,11 +4,29 @@ import db, { getAdminPinForExam } from '@/lib/db';
 const SESSION_COOKIE = 'admin_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 12; // 12 hours
 
+let warnedDefaults = false;
+
+function warnIfUsingDefaults() {
+    if (warnedDefaults) return;
+    warnedDefaults = true;
+    const isProd = process.env.NODE_ENV === 'production';
+    const hasMasterPin = !!process.env.ADMIN_MASTER_PIN;
+    const hasSecret = !!process.env.ADMIN_SESSION_SECRET;
+    if (isProd && (!hasMasterPin || !hasSecret)) {
+        console.warn(
+            '[exam-monitor] WARNING: ADMIN_MASTER_PIN and ADMIN_SESSION_SECRET are not set in production. ' +
+            'Falling back to insecure defaults. Set them via environment variables.'
+        );
+    }
+}
+
 export function getMasterPin(): string {
+    warnIfUsingDefaults();
     return process.env.ADMIN_MASTER_PIN || 'admin1234';
 }
 
 function getSessionSecret(): string {
+    warnIfUsingDefaults();
     return process.env.ADMIN_SESSION_SECRET || 'exam-monitor-session-secret';
 }
 

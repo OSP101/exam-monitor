@@ -51,9 +51,11 @@ const canPreview = (mimeType?: string) => {
 export default function ExamFilesManager({
     examId,
     adminPin,
+    onUnauthorized,
 }: {
     examId: string;
     adminPin: string;
+    onUnauthorized?: () => void;
 }) {
     const { locale } = useLocale();
     const inputRef = useRef<HTMLInputElement | null>(null);
@@ -101,6 +103,12 @@ export default function ExamFilesManager({
         xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) {
                 resolve();
+                return;
+            }
+
+            if (xhr.status === 401) {
+                onUnauthorized?.();
+                reject(new Error('Session expired. Please log in again.'));
                 return;
             }
 
@@ -160,6 +168,10 @@ export default function ExamFilesManager({
             body: JSON.stringify({ path: file.fullPath, adminPin }),
         });
         if (!res.ok) {
+            if (res.status === 401) {
+                onUnauthorized?.();
+                return;
+            }
             const payload = await res.json().catch(() => null);
             setUploadMessage(payload?.error || (locale === 'en' ? 'Delete failed.' : 'ลบไฟล์ไม่สำเร็จ'));
             return;

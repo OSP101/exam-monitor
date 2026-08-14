@@ -49,6 +49,8 @@ export default function AdminDashboard() {
             if (res.ok) {
                 setNewTitle('');
                 mutate();
+            } else if (res.status === 401) {
+                setIsAuthenticated(false);
             }
         } catch (e) {
             console.error('Failed to create exam');
@@ -74,6 +76,8 @@ export default function AdminDashboard() {
             });
             if (res.ok) {
                 mutate();
+            } else if (res.status === 401) {
+                setIsAuthenticated(false);
             } else {
                 const data = await res.json();
                 alert(data.error || 'Delete failed');

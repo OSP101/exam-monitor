@@ -42,6 +42,12 @@ export default function ExamSubjectsPage({ params }: { params: Promise<{ id: str
                 router.push(`/resources/${selectedSubject.folder}?exam=${id}`);
                 return;
             }
+            const data = await res.json().catch(() => null);
+            if (data?.error) {
+                setErrorMsg(data.error);
+                setPin('');
+                return;
+            }
         } catch (error) {
             console.error('Failed to verify subject PIN', error);
         }
