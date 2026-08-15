@@ -10,8 +10,10 @@ import {
     Search,
     Trash2,
     UploadCloud,
+    AlertTriangle,
 } from 'lucide-react';
 import { useLocale } from '@/lib/LocaleContext';
+import Modal from '@/components/Modal';
 
 type FileRecord = {
     name: string;
@@ -66,6 +68,7 @@ export default function ExamFilesManager({
     const [isUploading, setIsUploading] = useState(false);
     const [selectedFile, setSelectedFile] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
+    const [confirmDeleteFile, setConfirmDeleteFile] = useState<FileRecord | null>(null);
 
     const filesUrl = adminPin
         ? `/api/files?folder=${encodeURIComponent(examId)}&includeUnpublished=1&adminPin=${encodeURIComponent(adminPin)}`
@@ -155,12 +158,7 @@ export default function ExamFilesManager({
     };
 
     const handleDelete = async (file: FileRecord) => {
-        const confirmed = window.confirm(
-            locale === 'en'
-                ? `Delete ${file.name}?`
-                : `ลบไฟล์ ${file.name} ใช่หรือไม่`
-        );
-        if (!confirmed) return;
+        setConfirmDeleteFile(null);
 
         const res = await fetch('/api/files', {
             method: 'DELETE',
@@ -339,7 +337,7 @@ export default function ExamFilesManager({
                                 <a href={buildDownloadHref(file.fullPath, adminPin)} target="_blank" rel="noreferrer" style={{ padding: '8px', backgroundColor: '#111827', border: '1px solid #334155', borderRadius: '8px', color: '#cbd5e1' }}>
                                     <Download style={{ width: '15px', height: '15px' }} />
                                 </a>
-                                <button type="button" onClick={() => handleDelete(file)} style={{ padding: '8px', backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid transparent', borderRadius: '8px', color: '#f87171', cursor: 'pointer' }}>
+                                <button type="button" onClick={() => setConfirmDeleteFile(file)} style={{ padding: '8px', backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid transparent', borderRadius: '8px', color: '#f87171', cursor: 'pointer' }}>
                                     <Trash2 style={{ width: '15px', height: '15px' }} />
                                 </button>
                             </div>
@@ -372,6 +370,44 @@ export default function ExamFilesManager({
                     </div>
                 )} */}
             </div>
+
+            <Modal
+                open={!!confirmDeleteFile}
+                onClose={() => setConfirmDeleteFile(null)}
+                title={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#f87171' }}>
+                        <AlertTriangle size={20} />
+                        {locale === 'en' ? 'Delete File' : 'ลบไฟล์'}
+                    </div>
+                }
+                footer={
+                    <>
+                        <button
+                            type="button"
+                            onClick={() => setConfirmDeleteFile(null)}
+                            style={{ flex: 1, padding: '12px', backgroundColor: '#334155', color: '#cbd5e1', border: 'none', borderRadius: '10px', fontWeight: 600, cursor: 'pointer' }}
+                        >
+                            {locale === 'en' ? 'Cancel' : 'ยกเลิก'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => confirmDeleteFile && handleDelete(confirmDeleteFile)}
+                            style={{ flex: 1, padding: '12px', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}
+                        >
+                            {locale === 'en' ? 'Delete' : 'ลบ'}
+                        </button>
+                    </>
+                }
+            >
+                <p style={{ color: '#94a3b8', margin: '0 0 12px', fontSize: '14px', lineHeight: 1.6 }}>
+                    {locale === 'en'
+                        ? 'Are you sure you want to delete this file? Students will no longer be able to open it.'
+                        : 'คุณแน่ใจหรือไม่ว่าต้องการลบไฟล์นี้? นักศึกษาจะไม่สามารถเปิดไฟล์นี้ได้อีก'}
+                </p>
+                <div style={{ padding: '12px 16px', backgroundColor: '#0f172a', borderRadius: '10px', border: '1px solid #334155' }}>
+                    <div style={{ fontSize: '16px', fontWeight: 600, color: '#f1f5f9', wordBreak: 'break-all' }}>{confirmDeleteFile?.name}</div>
+                </div>
+            </Modal>
         </div>
     );
 }

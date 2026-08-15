@@ -71,6 +71,11 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
     };
 
     const handleSave = async () => {
+        if (!formData.examTitle || !String(formData.examTitle).trim()) {
+            setSaveMsg(t('exam_title_required'));
+            return;
+        }
+
         setSaving(true);
         setSaveMsg('');
         try {

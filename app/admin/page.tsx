@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import useSWR from 'swr';
-import { Settings, Plus, Layout, ExternalLink, Trash2, Clock, Users, Eye, EyeOff, Monitor, CheckSquare, Square } from 'lucide-react';
+import { Settings, Plus, Layout, Trash2, Clock, Users, Eye, EyeOff, Monitor, CheckSquare, Square, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { useLocale } from '@/lib/LocaleContext';
+import Modal from '@/components/Modal';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -19,6 +20,12 @@ export default function AdminDashboard() {
     const [pin, setPin] = useState('');
     const [showPin, setShowPin] = useState(false);
     const [authError, setAuthError] = useState('');
+    const [titleError, setTitleError] = useState('');
+    const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+    const [deletePin, setDeletePin] = useState('');
+    const [deleteShowPin, setDeleteShowPin] = useState(false);
+    const [deleteError, setDeleteError] = useState('');
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         fetch('/api/admin/verify')
@@ -37,7 +44,11 @@ export default function AdminDashboard() {
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newTitle) return;
+        if (!newTitle.trim()) {
+            setTitleError(t('create_exam_title_required'));
+            return;
+        }
+        setTitleError('');
 
         setIsCreating(true);
         try {
@@ -59,31 +70,48 @@ export default function AdminDashboard() {
         }
     };
 
-    const handleDelete = async (id: number) => {
-        console.log('Deleting exam id:', id);
-        if (!confirm(t('confirm_delete_exam'))) return;
-        const pin = prompt(t('prompt_admin_pin'));
-        if (!pin) return;
+    const openDeleteModal = (exam: any) => {
+        setDeleteTarget(exam);
+        setDeletePin('');
+        setDeleteShowPin(false);
+        setDeleteError('');
+    };
 
+    const handleConfirmDelete = async () => {
+        if (!deleteTarget) return;
+        if (!deletePin.trim()) {
+            setDeleteError(t('enter_delete_pin'));
+            return;
+        }
+
+        setDeleting(true);
+        setDeleteError('');
         try {
-            const res = await fetch(`/api/exams/${id}`, {
+            const res = await fetch(`/api/exams/${deleteTarget.id}`, {
                 method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Admin-Pin': pin
+                    'X-Admin-Pin': deletePin
                 },
-                body: JSON.stringify({ adminPinInput: pin })
+                body: JSON.stringify({ adminPinInput: deletePin })
             });
             if (res.ok) {
+                setDeleteTarget(null);
+                setDeletePin('');
                 mutate();
             } else if (res.status === 401) {
+                setDeleteTarget(null);
+                setDeletePin('');
                 setIsAuthenticated(false);
             } else {
-                const data = await res.json();
-                alert(data.error || 'Delete failed');
+                const data = await res.json().catch(() => null);
+                setDeleteError(data?.error || t('delete_failed'));
             }
         } catch (e) {
             console.error('Failed to delete exam', e);
+            setDeleteError(t('error_occurred'));
+        } finally {
+            setDeleting(false);
         }
     };
 
@@ -185,39 +213,48 @@ export default function AdminDashboard() {
                         <Plus style={{ width: '24px', height: '24px', color: '#4ade80' }} />
                         {t('create_exam')}
                     </h2>
-                    <form onSubmit={handleCreate} style={{ display: 'flex', gap: '16px' }}>
-                        <input
-                            type="text"
-                            value={newTitle}
-                            onChange={(e) => setNewTitle(e.target.value)}
-                            placeholder={t('exam_name_placeholder')}
-                            style={{
-                                flex: 1,
-                                padding: '14px 20px',
-                                backgroundColor: '#0f172a',
-                                border: '1px solid #475569',
-                                borderRadius: '12px',
-                                color: 'white',
-                                fontSize: '16px',
-                                outline: 'none'
-                            }}
-                        />
-                        <button
-                            type="submit"
-                            disabled={isCreating}
-                            style={{
-                                padding: '14px 28px',
-                                backgroundColor: '#3b82f6',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '12px',
-                                fontWeight: 'bold',
-                                cursor: isCreating ? 'not-allowed' : 'pointer',
-                                transition: 'opacity 0.2s'
-                            }}
-                        >
-                            {isCreating ? (locale === 'th' ? 'กำลังสร้าง...' : 'Creating...') : t('create_exam')}
-                        </button>
+                    <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ display: 'flex', gap: '16px' }}>
+                            <input
+                                type="text"
+                                value={newTitle}
+                                onChange={(e) => { setNewTitle(e.target.value); if (titleError) setTitleError(''); }}
+                                placeholder={t('exam_name_placeholder')}
+                                required
+                                style={{
+                                    flex: 1,
+                                    padding: '14px 20px',
+                                    backgroundColor: '#0f172a',
+                                    border: `1px solid ${titleError ? '#ef4444' : '#475569'}`,
+                                    borderRadius: '12px',
+                                    color: 'white',
+                                    fontSize: '16px',
+                                    outline: 'none'
+                                }}
+                            />
+                            <button
+                                type="submit"
+                                disabled={isCreating}
+                                style={{
+                                    padding: '14px 28px',
+                                    backgroundColor: '#3b82f6',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '12px',
+                                    fontWeight: 'bold',
+                                    cursor: isCreating ? 'not-allowed' : 'pointer',
+                                    transition: 'opacity 0.2s'
+                                }}
+                            >
+                                {isCreating ? (locale === 'th' ? 'กำลังสร้าง...' : 'Creating...') : t('create_exam')}
+                            </button>
+                        </div>
+                        {titleError && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f87171', fontSize: '14px' }}>
+                                <AlertTriangle size={16} />
+                                {titleError}
+                            </div>
+                        )}
                     </form>
                 </div>
 
@@ -313,7 +350,7 @@ export default function AdminDashboard() {
                                 </div>
 
                                 <button
-                                    onClick={() => handleDelete(exam.id)}
+                                    onClick={() => openDeleteModal(exam)}
                                     style={{
                                         marginTop: '12px',
                                         display: 'flex',
@@ -342,6 +379,68 @@ export default function AdminDashboard() {
                         </div>
                     )}
                 </div>
+
+                <Modal
+                    open={!!deleteTarget}
+                    onClose={() => setDeleteTarget(null)}
+                    title={
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#f87171' }}>
+                            <AlertTriangle size={20} />
+                            {t('confirm_delete_exam_title')}
+                        </div>
+                    }
+                    footer={
+                        <>
+                            <button
+                                type="button"
+                                onClick={() => setDeleteTarget(null)}
+                                disabled={deleting}
+                                style={{ flex: 1, padding: '12px', backgroundColor: '#334155', color: '#cbd5e1', border: 'none', borderRadius: '10px', fontWeight: 600, cursor: deleting ? 'not-allowed' : 'pointer' }}
+                            >
+                                {t('cancel')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmDelete}
+                                disabled={deleting}
+                                style={{ flex: 1, padding: '12px', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, cursor: deleting ? 'not-allowed' : 'pointer' }}
+                            >
+                                {deleting ? (locale === 'th' ? 'กำลังลบ...' : 'Deleting...') : t('delete')}
+                            </button>
+                        </>
+                    }
+                >
+                    {deleteTarget && (
+                        <>
+                            <p style={{ color: '#94a3b8', margin: '0 0 16px', fontSize: '14px', lineHeight: 1.6 }}>
+                                {t('confirm_delete_exam')}
+                            </p>
+                            <div style={{ padding: '12px 16px', backgroundColor: '#0f172a', borderRadius: '10px', border: '1px solid #334155', marginBottom: '16px' }}>
+                                <div style={{ fontSize: '16px', fontWeight: 600, color: '#f1f5f9' }}>{deleteTarget.title}</div>
+                            </div>
+                            <label style={{ fontSize: '14px', color: '#94a3b8', display: 'block', marginBottom: '8px' }}>{t('admin_pin')}</label>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type={deleteShowPin ? 'text' : 'password'}
+                                    value={deletePin}
+                                    onChange={(e) => setDeletePin(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmDelete(); }}
+                                    placeholder={t('enter_admin_pin')}
+                                    autoFocus
+                                    style={{ width: '100%', padding: '12px', paddingRight: '45px', backgroundColor: '#0f172a', border: `1px solid ${deleteError ? '#ef4444' : '#475569'}`, borderRadius: '8px', color: 'white', outline: 'none' }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setDeleteShowPin(!deleteShowPin)}
+                                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '4px' }}
+                                >
+                                    {deleteShowPin ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
+                            {deleteError && <p style={{ color: '#f87171', fontSize: '14px', margin: '10px 0 0' }}>{deleteError}</p>}
+                        </>
+                    )}
+                </Modal>
             </div>
         </div >
     );
