@@ -8,6 +8,31 @@ import { useLocale } from '@/lib/LocaleContext';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
+const hexToRgb = (hex: string) => {
+    const n = parseInt(hex.slice(1), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+};
+const lerpColor = (a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }, t: number) => ({
+    r: Math.round(a.r + (b.r - a.r) * t),
+    g: Math.round(a.g + (b.g - a.g) * t),
+    b: Math.round(a.b + (b.b - a.b) * t),
+});
+const darken = (c: { r: number; g: number; b: number }, f: number) => ({
+    r: Math.round(c.r * f), g: Math.round(c.g * f), b: Math.round(c.b * f),
+});
+const rgb = (c: { r: number; g: number; b: number }) => `rgb(${c.r}, ${c.g}, ${c.b})`;
+const rgba = (c: { r: number; g: number; b: number }, a: number) => `rgba(${c.r}, ${c.g}, ${c.b}, ${a})`;
+const BLUE = hexToRgb('#3b82f6');
+const YELLOW = hexToRgb('#f59e0b');
+const RED = hexToRgb('#ef4444');
+const DARK_RED = hexToRgb('#b91c1c');
+// Smooth gradient: 100%->15% blue, 15%->6% yellow, <6% red->dark red
+const colorFromRatio = (ratio: number) => {
+    if (ratio >= 0.15) return lerpColor(BLUE, YELLOW, (1 - ratio) / 0.85);
+    if (ratio >= 0.06) return lerpColor(YELLOW, RED, (0.15 - ratio) / 0.09);
+    return lerpColor(RED, DARK_RED, (0.06 - ratio) / 0.06);
+};
+
 export default function TimePage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     // Real-time sync: refresh every 3 seconds
@@ -233,29 +258,30 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
     };
     const currentStyle = statusStyles[status];
 
-    // Color grading by remaining time: blue (safe) -> yellow (warning) -> red (danger)
-    let level: 'safe' | 'warn' | 'danger' = 'safe';
+    // Color grading by remaining-time ratio (continuous gradient, no hard switches)
+    let theme: any;
+    let isPulsing = false;
+
     if (status === 'RUNNING' && currentSession) {
         const remainMs = ((timeLeft.hours * 3600) + (timeLeft.minutes * 60) + timeLeft.seconds) * 1000;
         const startMs = new Date(currentSession.startTime).getTime();
         const endMs = new Date(currentSession.endTime).getTime();
         const totalMs = endMs - startMs;
         const ratio = totalMs > 0 ? remainMs / totalMs : 1;
-        if (ratio <= 0.06) level = 'danger';
-        else if (ratio <= 0.15) level = 'warn';
+        const c = colorFromRatio(ratio);
+        isPulsing = ratio <= 0.06;
+        theme = {
+            ring: rgb(c),
+            text: rgb(darken(c, 0.75)),
+            glow: rgba(c, 0.35),
+            bg1: rgba(c, 0.06),
+            bg2: rgba(c, 0.15),
+        };
+    } else if (status === 'WAITING') {
+        theme = { ring: rgb(YELLOW), text: '#b45309', glow: rgba(YELLOW, 0.25), bg1: rgba(YELLOW, 0.06), bg2: rgba(YELLOW, 0.15) };
+    } else {
+        theme = { ring: rgb(RED), text: '#b91c1c', glow: rgba(RED, 0.3), bg1: rgba(RED, 0.06), bg2: rgba(RED, 0.15) };
     }
-
-    const levelThemes: any = {
-        safe: { bg1: '#eff6ff', bg2: '#dbeafe', ring: '#3b82f6', text: '#2563eb', glow: 'rgba(59,130,246,0.35)' },
-        warn: { bg1: '#fffbeb', bg2: '#fef3c7', ring: '#f59e0b', text: '#b45309', glow: 'rgba(245,158,11,0.35)' },
-        danger: { bg1: '#fef2f2', bg2: '#fee2e2', ring: '#ef4444', text: '#dc2626', glow: 'rgba(239,68,68,0.45)' },
-    };
-    const theme = status === 'RUNNING'
-        ? levelThemes[level]
-        : status === 'WAITING'
-            ? { bg1: '#fffbeb', bg2: '#fef3c7', ring: '#f59e0b', text: '#b45309', glow: 'rgba(245,158,11,0.25)' }
-            : { bg1: '#fef2f2', bg2: '#fee2e2', ring: '#ef4444', text: '#dc2626', glow: 'rgba(239,68,68,0.3)' };
-    const isPulsing = status === 'RUNNING' && level === 'danger';
 
     // Active Monitor
     return (
@@ -270,6 +296,7 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
             <div style={{
                 position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 60,
                 boxShadow: `inset 0 0 0 6px ${theme.glow}`,
+                transition: 'box-shadow 1s linear',
                 animation: isPulsing ? 'edge-pulse 1s ease-in-out infinite' : 'none',
             }} />
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -316,9 +343,9 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
 
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
                             <TimeUnit value={timeLeft.hours} label={t('hour')} color={theme.text} />
-                            <span style={{ fontSize: '100px', color: theme.text, opacity: 0.45, fontWeight: '300', lineHeight: 1 }}>:</span>
+                            <span style={{ fontSize: '100px', color: theme.text, opacity: 0.45, fontWeight: '300', lineHeight: 1, transition: 'color 1s linear' }}>:</span>
                             <TimeUnit value={timeLeft.minutes} label={t('minute')} color={theme.text} />
-                            <span style={{ fontSize: '100px', color: theme.text, opacity: 0.45, fontWeight: '300', lineHeight: 1 }}>:</span>
+                            <span style={{ fontSize: '100px', color: theme.text, opacity: 0.45, fontWeight: '300', lineHeight: 1, transition: 'color 1s linear' }}>:</span>
                             <TimeUnit value={timeLeft.seconds} label={t('second')} color={theme.text} />
                         </div>
 
@@ -386,7 +413,7 @@ function TimeUnit({ value, label, color }: { value: number, label: string, color
                 backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '20px',
                 boxShadow: '0 15px 50px rgba(59,130,246,0.2)', padding: '20px 32px', border: '2px solid #dbeafe'
             }}>
-                <span style={{ fontSize: '120px', fontWeight: '900', color, fontFamily: 'monospace', lineHeight: 1 }}>
+                <span style={{ fontSize: '120px', fontWeight: '900', color, fontFamily: 'monospace', lineHeight: 1, transition: 'color 1s linear' }}>
                     {String(value).padStart(2, '0')}
                 </span>
             </div>

@@ -9,6 +9,31 @@ import { useLocale } from '@/lib/LocaleContext';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
+const hexToRgb = (hex: string) => {
+    const n = parseInt(hex.slice(1), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+};
+const lerpColor = (a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }, t: number) => ({
+    r: Math.round(a.r + (b.r - a.r) * t),
+    g: Math.round(a.g + (b.g - a.g) * t),
+    b: Math.round(a.b + (b.b - a.b) * t),
+});
+const darken = (c: { r: number; g: number; b: number }, f: number) => ({
+    r: Math.round(c.r * f), g: Math.round(c.g * f), b: Math.round(c.b * f),
+});
+const rgb = (c: { r: number; g: number; b: number }) => `rgb(${c.r}, ${c.g}, ${c.b})`;
+const rgba = (c: { r: number; g: number; b: number }, a: number) => `rgba(${c.r}, ${c.g}, ${c.b}, ${a})`;
+const BLUE = hexToRgb('#3b82f6');
+const YELLOW = hexToRgb('#f59e0b');
+const RED = hexToRgb('#ef4444');
+const DARK_RED = hexToRgb('#b91c1c');
+// Smooth gradient: 100%->15% blue, 15%->6% yellow, <6% red->dark red
+const colorFromRatio = (ratio: number) => {
+    if (ratio >= 0.15) return lerpColor(BLUE, YELLOW, (1 - ratio) / 0.85);
+    if (ratio >= 0.06) return lerpColor(YELLOW, RED, (0.15 - ratio) / 0.09);
+    return lerpColor(RED, DARK_RED, (0.06 - ratio) / 0.06);
+};
+
 // Scaled down TimeUnit for grid view
 function TimeUnit({ value, label }: { value: number, label: string }) {
     return (
@@ -128,6 +153,18 @@ function ExamMonitorCell({ id }: { id: string }) {
     const isUrgent = status === 'RUNNING' && remainRatio <= 0.06;
     const isWarning = status === 'RUNNING' && !isUrgent && remainRatio <= 0.15;
 
+    // Continuous gradient colors for the timer (blue -> yellow -> red)
+    const runningColor = status === 'RUNNING' ? colorFromRatio(remainRatio) : null;
+    const timerColor = status === 'RUNNING'
+        ? rgb(darken(runningColor!, 0.75))
+        : (status === 'WAITING' ? '#d97706' : '#475569');
+    const timerBoxBg = status === 'RUNNING' ? rgba(runningColor!, 0.08) : '#f8fafc';
+    const timerBoxBorder = status === 'RUNNING' ? rgba(runningColor!, 0.5) : '#e2e8f0';
+    const timerLabelColor = status === 'RUNNING' ? rgb(runningColor!) : (status === 'WAITING' ? '#d97706' : '#64748b');
+    const cellBorderColor = status === 'RUNNING' ? rgb(runningColor!) : '#e2e8f0';
+    const cellBorderStyle = status === 'RUNNING' ? '3px solid' : '1px solid';
+    const cellShadow = status === 'RUNNING' ? `0 10px 30px -5px ${rgba(runningColor!, 0.25)}` : '0 4px 6px -1px rgba(0, 0, 0, 0.05)';
+
     const statusColors: any = {
         WAITING: { bg: '#fffbeb', text: '#d97706', border: '#fcd34d', label: t('waiting') },
         RUNNING: { bg: '#f0fdf4', text: '#166534', border: '#86efac', label: t('running') },
@@ -142,26 +179,19 @@ function ExamMonitorCell({ id }: { id: string }) {
 
     const style = statusColors[status] || statusColors.WAITING;
 
-    let timerColor = status === 'RUNNING' ? '#1e3a8a' : '#475569';
-    if (isUrgent) timerColor = '#ef4444';
-    else if (isWarning) timerColor = '#d97706';
-
-    const borderColor = isUrgent ? '#ef4444' : (isWarning ? '#f59e0b' : (status === 'RUNNING' ? '#3b82f6' : '#e2e8f0'));
-    const borderStyle = isUrgent ? '3px solid' : (isWarning ? '3px solid' : (status === 'RUNNING' ? '3px solid' : '1px solid'));
-
     return (
         <div style={{
             height: '100%',
             backgroundColor: 'white',
             borderRadius: '24px',
-            border: `${borderStyle} ${borderColor}`,
+            border: `${cellBorderStyle} ${cellBorderColor}`,
             padding: '20px',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            boxShadow: status === 'RUNNING' ? '0 10px 30px -5px rgba(59, 130, 246, 0.2)' : '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+            boxShadow: cellShadow,
             position: 'relative',
-            transition: 'all 0.3s ease',
+            transition: 'all 1s ease',
             animation: isUrgent ? 'pulse-border 0.8s infinite' : 'none'
         }}>
             <style>{`
@@ -211,48 +241,48 @@ function ExamMonitorCell({ id }: { id: string }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                         <div style={{
-                            backgroundColor: isUrgent ? '#fef2f2' : (isWarning ? '#fffbeb' : '#f8fafc'), borderRadius: '20px',
+                            backgroundColor: timerBoxBg, borderRadius: '20px',
                             boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)', padding: '20px 32px',
-                            border: `2px solid ${isUrgent ? '#fca5a5' : (isWarning ? '#fcd34d' : '#e2e8f0')}`,
-                            minWidth: '140px', textAlign: 'center'
+                            border: `2px solid ${timerBoxBorder}`,
+                            minWidth: '140px', textAlign: 'center', transition: 'background 1s linear, border-color 1s linear'
                         }}>
-                            <span style={{ fontSize: '96px', fontWeight: '900', color: timerColor, fontFamily: 'monospace', lineHeight: 1 }}>
+                            <span style={{ fontSize: '96px', fontWeight: '900', color: timerColor, fontFamily: 'monospace', lineHeight: 1, transition: 'color 1s linear' }}>
                                 {String(timeLeft.hours).padStart(2, '0')}
                             </span>
                         </div>
-                        <span style={{ fontSize: '18px', color: isUrgent ? '#ef4444' : (isWarning ? '#d97706' : '#64748b'), marginTop: '12px', fontWeight: '700' }}>{t('hour')}</span>
+                        <span style={{ fontSize: '18px', color: timerLabelColor, marginTop: '12px', fontWeight: '700', transition: 'color 1s linear' }}>{t('hour')}</span>
                     </div>
 
                     <span style={{ fontSize: '32px', color: '#cbd5e1', fontWeight: '300', marginBottom: '40px' }}>:</span>
 
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                         <div style={{
-                            backgroundColor: isUrgent ? '#fef2f2' : (isWarning ? '#fffbeb' : '#f8fafc'), borderRadius: '20px',
+                            backgroundColor: timerBoxBg, borderRadius: '20px',
                             boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)', padding: '20px 32px',
-                            border: `2px solid ${isUrgent ? '#fca5a5' : (isWarning ? '#fcd34d' : '#e2e8f0')}`,
-                            minWidth: '140px', textAlign: 'center'
+                            border: `2px solid ${timerBoxBorder}`,
+                            minWidth: '140px', textAlign: 'center', transition: 'background 1s linear, border-color 1s linear'
                         }}>
-                            <span style={{ fontSize: '96px', fontWeight: '900', color: timerColor, fontFamily: 'monospace', lineHeight: 1 }}>
+                            <span style={{ fontSize: '96px', fontWeight: '900', color: timerColor, fontFamily: 'monospace', lineHeight: 1, transition: 'color 1s linear' }}>
                                 {String(timeLeft.minutes).padStart(2, '0')}
                             </span>
                         </div>
-                        <span style={{ fontSize: '18px', color: isUrgent ? '#ef4444' : (isWarning ? '#d97706' : '#64748b'), marginTop: '12px', fontWeight: '700' }}>{t('minute')}</span>
+                        <span style={{ fontSize: '18px', color: timerLabelColor, marginTop: '12px', fontWeight: '700', transition: 'color 1s linear' }}>{t('minute')}</span>
                     </div>
 
                     <span style={{ fontSize: '32px', color: '#cbd5e1', fontWeight: '300', marginBottom: '40px' }}>:</span>
 
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                         <div style={{
-                            backgroundColor: isUrgent ? '#fef2f2' : (isWarning ? '#fffbeb' : '#f8fafc'), borderRadius: '20px',
+                            backgroundColor: timerBoxBg, borderRadius: '20px',
                             boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)', padding: '20px 32px',
-                            border: `2px solid ${isUrgent ? '#fca5a5' : (isWarning ? '#fcd34d' : '#e2e8f0')}`,
-                            minWidth: '140px', textAlign: 'center'
+                            border: `2px solid ${timerBoxBorder}`,
+                            minWidth: '140px', textAlign: 'center', transition: 'background 1s linear, border-color 1s linear'
                         }}>
-                            <span style={{ fontSize: '96px', fontWeight: '900', color: timerColor, fontFamily: 'monospace', lineHeight: 1 }}>
+                            <span style={{ fontSize: '96px', fontWeight: '900', color: timerColor, fontFamily: 'monospace', lineHeight: 1, transition: 'color 1s linear' }}>
                                 {String(timeLeft.seconds).padStart(2, '0')}
                             </span>
                         </div>
-                        <span style={{ fontSize: '18px', color: isUrgent ? '#ef4444' : (isWarning ? '#d97706' : '#64748b'), marginTop: '12px', fontWeight: '700' }}>{t('second')}</span>
+                        <span style={{ fontSize: '18px', color: timerLabelColor, marginTop: '12px', fontWeight: '700', transition: 'color 1s linear' }}>{t('second')}</span>
                     </div>
                 </div>
 
