@@ -125,6 +125,7 @@ const translations = {
         session_active: 'กำลังสอบ',
         session_upcoming: 'ยังไม่เริ่ม',
         session_past: 'ผ่านไปแล้ว',
+        session_duration: 'ระยะเวลา',
     },
     en: {
         back: 'Back',
@@ -247,6 +248,7 @@ const translations = {
         session_active: 'In progress',
         session_upcoming: 'Upcoming',
         session_past: 'Finished',
+        session_duration: 'Duration',
     }
 };
 
