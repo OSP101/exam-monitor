@@ -212,6 +212,35 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
         setFormData({ ...formData, subjects: newSubjects });
     };
 
+    const formatTime = (iso: string) => {
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return '';
+        return d.toLocaleTimeString(locale === 'th' ? 'th-TH' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+    };
+
+    const formatDuration = (start: string, end: string) => {
+        if (!start || !end) return '';
+        const s = new Date(start).getTime();
+        const e = new Date(end).getTime();
+        if (isNaN(s) || isNaN(e) || e <= s) return '';
+        const mins = Math.round((e - s) / 60000);
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        if (h > 0 && m > 0) return `${h} ${t('hour')} ${m} ${t('minute')}`;
+        if (h > 0) return `${h} ${t('hour')}`;
+        return `${m} ${t('minute')}`;
+    };
+
+    const getSessionStatus = (start: string, end: string): 'active' | 'upcoming' | 'past' => {
+        const now = Date.now();
+        const s = new Date(start).getTime();
+        const e = new Date(end).getTime();
+        if (isNaN(s) || isNaN(e)) return 'upcoming';
+        if (now < s) return 'upcoming';
+        if (now >= s && now < e) return 'active';
+        return 'past';
+    };
+
     if (!exam) return (
         <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f172a' }}>
             <div style={{ width: '48px', height: '48px', border: '4px solid #3b82f6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
@@ -424,6 +453,82 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                                 </div>
                             );
                         })}
+                    </div>
+                </div>
+
+                {/* Section: Preview */}
+                <div style={{ padding: '24px', backgroundColor: '#1e293b', borderRadius: '16px', border: '1px solid #334155', marginBottom: '24px' }}>
+                    <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Eye style={{ width: '18px', height: '18px', color: '#22d3ee' }} /> {t('preview_title')}
+                    </h3>
+                    <p style={{ color: '#94a3b8', fontSize: '13px', margin: '0 0 20px' }}>{t('preview_subtitle')}</p>
+
+                    <div style={{ marginBottom: '20px' }}>
+                        <div style={{ fontSize: '14px', fontWeight: 600, color: '#fbbf24', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Clock style={{ width: '16px', height: '16px' }} /> {t('preview_sessions')}
+                        </div>
+                        {formData.sessions.length === 0 ? (
+                            <div style={{ color: '#64748b', fontSize: '14px', padding: '12px 16px', backgroundColor: '#0f172a', borderRadius: '10px', border: '1px solid #334155' }}>
+                                {t('preview_empty_sessions')}
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {formData.sessions.map((s: any, idx: number) => {
+                                    const st = getSessionStatus(s.startTime, s.endTime);
+                                    const statusMeta: any = {
+                                        active: { label: t('session_active'), color: '#4ade80', bg: 'rgba(74,222,128,0.12)', border: '#22c55e' },
+                                        upcoming: { label: t('session_upcoming'), color: '#60a5fa', bg: 'rgba(96,165,250,0.12)', border: '#3b82f6' },
+                                        past: { label: t('session_past'), color: '#94a3b8', bg: 'rgba(148,163,184,0.12)', border: '#64748b' },
+                                    }[st];
+                                    const hasTime = s.startTime && s.endTime;
+                                    return (
+                                        <div key={s.id || idx} style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', padding: '12px 16px', backgroundColor: '#0f172a', borderRadius: '10px', border: '1px solid #334155' }}>
+                                            <div style={{ fontWeight: 700, color: '#f1f5f9', minWidth: '90px' }}>{s.name || `${t('round_label')}${idx + 1}`}</div>
+                                            <div style={{ fontSize: '14px', color: '#94a3b8', fontFamily: 'monospace' }}>
+                                                {hasTime
+                                                    ? `${formatTime(s.startTime)} - ${formatTime(s.endTime)}`
+                                                    : <span style={{ color: '#f87171' }}>{t('preview_no_time')}</span>}
+                                            </div>
+                                            <div style={{ fontSize: '15px', fontWeight: 700, color: hasTime ? '#e2e8f0' : '#475569' }}>
+                                                {hasTime ? formatDuration(s.startTime, s.endTime) : '--'}
+                                            </div>
+                                            <div style={{ flex: 1 }} />
+                                            <span style={{ padding: '4px 12px', borderRadius: '999px', fontSize: '13px', fontWeight: 700, backgroundColor: statusMeta.bg, color: statusMeta.color, border: `1px solid ${statusMeta.border}` }}>
+                                                {statusMeta.label}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    <div>
+                        <div style={{ fontSize: '14px', fontWeight: 600, color: '#4ade80', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Megaphone style={{ width: '16px', height: '16px' }} /> {t('preview_announcements')}
+                        </div>
+                        {formData.announcements.length === 0 ? (
+                            <div style={{ color: '#64748b', fontSize: '14px', padding: '12px 16px', backgroundColor: '#0f172a', borderRadius: '10px', border: '1px solid #334155' }}>
+                                {t('preview_empty_announcements')}
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {formData.announcements.map((ann: any, idx: number) => {
+                                    const content = typeof ann === 'string' ? ann : (ann.content || '');
+                                    const content_en = typeof ann === 'string' ? '' : (ann.content_en || '');
+                                    return (
+                                        <div key={'pv_' + idx} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px', backgroundColor: '#0f172a', borderRadius: '10px', border: '1px solid #334155' }}>
+                                            <span style={{ flexShrink: 0, width: '26px', height: '26px', borderRadius: '50%', backgroundColor: '#3b82f6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '13px' }}>
+                                                {idx + 1}
+                                            </span>
+                                            <span style={{ fontSize: '15px', color: '#e2e8f0', fontWeight: 600 }}>
+                                                {locale === 'en' ? (content_en || content) : content}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 </div>
 

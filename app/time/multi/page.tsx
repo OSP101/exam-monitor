@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { Monitor, ArrowLeft, Clock, Megaphone, AlertCircle, Languages } from 'lucide-react';
+import { Monitor, ArrowLeft, Clock, Megaphone, AlertCircle, Maximize, Minimize } from 'lucide-react';
 import { useLocale } from '@/lib/LocaleContext';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -316,6 +316,22 @@ function MultiMonitorContent() {
 }
 export default function MultiExamMonitorPage() {
     const { locale, setLocale, t } = useLocale();
+    const [isFullscreen, setIsFullscreen] = useState(false);
+
+    useEffect(() => {
+        const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+        document.addEventListener('fullscreenchange', onFsChange);
+        return () => document.removeEventListener('fullscreenchange', onFsChange);
+    }, []);
+
+    const toggleFullscreen = () => {
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        } else {
+            document.documentElement.requestFullscreen();
+        }
+    };
+
     return (
         <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', padding: '24px' }}>
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', padding: '0 12px' }}>
@@ -329,9 +345,18 @@ export default function MultiExamMonitorPage() {
                         <button onClick={() => setLocale('en')} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #bfdbfe', backgroundColor: locale === 'en' ? '#3b82f6' : 'white', color: locale === 'en' ? 'white' : '#64748b', cursor: 'pointer', fontWeight: 'bold' }}>EN</button>
                     </div>
                 </div>
-                <Link href="/admin" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', textDecoration: 'none', fontWeight: 'bold' }}>
-                    <ArrowLeft size={20} /> {t('back')}
-                </Link>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <button
+                        onClick={toggleFullscreen}
+                        title={isFullscreen ? (locale === 'th' ? 'ออกจากเต็มจอ' : 'Exit fullscreen') : (locale === 'th' ? 'เต็มจอ' : 'Fullscreen')}
+                        style={{ padding: '10px', borderRadius: '10px', backgroundColor: 'white', border: '1px solid #bfdbfe', cursor: 'pointer' }}
+                    >
+                        {isFullscreen ? <Minimize size={20} color="#64748b" /> : <Maximize size={20} color="#64748b" />}
+                    </button>
+                    <Link href="/admin" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', textDecoration: 'none', fontWeight: 'bold' }}>
+                        <ArrowLeft size={20} /> {t('back')}
+                    </Link>
+                </div>
             </header>
 
             <Suspense fallback={<div style={{ textAlign: 'center', padding: '100px' }}>Loading...</div>}>

@@ -115,6 +115,16 @@ const translations = {
         delete_failed: 'ลบไม่สำเร็จ',
         saving: 'กำลังบันทึก...',
         confirm_delete: 'ยืนยันการลบไฟล์นี้หรือไม่?',
+        preview_title: 'ตัวอย่างการแสดงผลบนหน้าจอเวลา',
+        preview_subtitle: 'ดูตัวอย่างรอบการสอบและประกาศที่จะแสดงบนหน้าจอเวลา (อัปเดตอัตโนมัติจากข้อมูลที่กรอก)',
+        preview_sessions: 'รอบการสอบและระยะเวลา',
+        preview_announcements: 'ประกาศ',
+        preview_empty_sessions: 'ยังไม่มีรอบการสอบ เพิ่มรอบก่อนเพื่อดูตัวอย่าง',
+        preview_empty_announcements: 'ยังไม่มีประกาศ',
+        preview_no_time: 'ยังไม่ได้ตั้งเวลา',
+        session_active: 'กำลังสอบ',
+        session_upcoming: 'ยังไม่เริ่ม',
+        session_past: 'ผ่านไปแล้ว',
     },
     en: {
         back: 'Back',
@@ -227,6 +237,16 @@ const translations = {
         delete_failed: 'Delete failed',
         saving: 'Saving...',
         confirm_delete: 'Confirm delete this file?',
+        preview_title: 'Time Monitor Preview',
+        preview_subtitle: 'Preview how sessions and announcements will appear on the time monitor (auto-updates from your inputs)',
+        preview_sessions: 'Exam sessions & durations',
+        preview_announcements: 'Announcements',
+        preview_empty_sessions: 'No sessions yet. Add a session to preview.',
+        preview_empty_announcements: 'No announcements yet',
+        preview_no_time: 'No time set',
+        session_active: 'In progress',
+        session_upcoming: 'Upcoming',
+        session_past: 'Finished',
     }
 };
 

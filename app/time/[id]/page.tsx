@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, use } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { Settings, Lock, Unlock, Shield, Megaphone, ArrowLeft, Languages } from 'lucide-react';
+import { Settings, Lock, Unlock, Shield, Megaphone, ArrowLeft, Maximize, Minimize } from 'lucide-react';
 import { useLocale } from '@/lib/LocaleContext';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -26,6 +26,21 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
     const [isLocked, setIsLocked] = useState(true);
     const [pin, setPin] = useState('');
     const [errorMsg, setErrorMsg] = useState('');
+    const [isFullscreen, setIsFullscreen] = useState(false);
+
+    useEffect(() => {
+        const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+        document.addEventListener('fullscreenchange', onFsChange);
+        return () => document.removeEventListener('fullscreenchange', onFsChange);
+    }, []);
+
+    const toggleFullscreen = () => {
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        } else {
+            document.documentElement.requestFullscreen();
+        }
+    };
 
     const [currentSessionIndex, setCurrentSessionIndex] = useState(0);
     const [timeLeft, setTimeLeft] = useState({ hours: 0, minutes: 0, seconds: 0 });
@@ -218,9 +233,45 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
     };
     const currentStyle = statusStyles[status];
 
+    // Color grading by remaining time: blue (safe) -> yellow (warning) -> red (danger)
+    let level: 'safe' | 'warn' | 'danger' = 'safe';
+    if (status === 'RUNNING' && currentSession) {
+        const remainMs = ((timeLeft.hours * 3600) + (timeLeft.minutes * 60) + timeLeft.seconds) * 1000;
+        const startMs = new Date(currentSession.startTime).getTime();
+        const endMs = new Date(currentSession.endTime).getTime();
+        const totalMs = endMs - startMs;
+        const ratio = totalMs > 0 ? remainMs / totalMs : 1;
+        if (remainMs <= 10 * 60000 || ratio <= 0.2) level = 'danger';
+        else if (remainMs <= 30 * 60000 || ratio <= 0.5) level = 'warn';
+    }
+
+    const levelThemes: any = {
+        safe: { bg1: '#eff6ff', bg2: '#dbeafe', ring: '#3b82f6', text: '#2563eb', glow: 'rgba(59,130,246,0.35)' },
+        warn: { bg1: '#fffbeb', bg2: '#fef3c7', ring: '#f59e0b', text: '#b45309', glow: 'rgba(245,158,11,0.35)' },
+        danger: { bg1: '#fef2f2', bg2: '#fee2e2', ring: '#ef4444', text: '#dc2626', glow: 'rgba(239,68,68,0.45)' },
+    };
+    const theme = status === 'RUNNING'
+        ? levelThemes[level]
+        : status === 'WAITING'
+            ? { bg1: '#fffbeb', bg2: '#fef3c7', ring: '#f59e0b', text: '#b45309', glow: 'rgba(245,158,11,0.25)' }
+            : { bg1: '#fef2f2', bg2: '#fee2e2', ring: '#ef4444', text: '#dc2626', glow: 'rgba(239,68,68,0.3)' };
+    const isPulsing = status === 'RUNNING' && level === 'danger';
+
     // Active Monitor
     return (
-        <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', padding: '24px', overflow: 'hidden' }}>
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', padding: '24px', overflow: 'hidden', background: `linear-gradient(180deg, ${theme.bg1} 0%, ${theme.bg2} 100%)`, transition: 'background 0.8s ease' }}>
+            <style>{`
+                @keyframes edge-pulse {
+                    0% { box-shadow: inset 0 0 0 5px ${theme.glow}, inset 0 0 30px 0 rgba(239,68,68,0); }
+                    50% { box-shadow: inset 0 0 0 14px ${theme.ring}, inset 0 0 90px 0 ${theme.glow}; }
+                    100% { box-shadow: inset 0 0 0 5px ${theme.glow}, inset 0 0 30px 0 rgba(239,68,68,0); }
+                }
+            `}</style>
+            <div style={{
+                position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 60,
+                boxShadow: `inset 0 0 0 6px ${theme.glow}`,
+                animation: isPulsing ? 'edge-pulse 1s ease-in-out infinite' : 'none',
+            }} />
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h1 style={{ fontSize: '32px', fontWeight: 'bold', color: '#1e40af', margin: 0 }}>{locale === 'en' ? (config.title_en || config.examTitle) : config.examTitle}</h1>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -233,6 +284,13 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                         <button onClick={() => setLocale('th')} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #bfdbfe', backgroundColor: locale === 'th' ? '#3b82f6' : 'white', color: locale === 'th' ? 'white' : '#64748b', cursor: 'pointer', fontWeight: 'bold' }}>TH</button>
                         <button onClick={() => setLocale('en')} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #bfdbfe', backgroundColor: locale === 'en' ? '#3b82f6' : 'white', color: locale === 'en' ? 'white' : '#64748b', cursor: 'pointer', fontWeight: 'bold' }}>EN</button>
                     </div>
+                    <button
+                        onClick={toggleFullscreen}
+                        title={isFullscreen ? (locale === 'th' ? 'ออกจากเต็มจอ' : 'Exit fullscreen') : (locale === 'th' ? 'เต็มจอ' : 'Fullscreen')}
+                        style={{ padding: '12px', borderRadius: '12px', backgroundColor: 'rgba(255,255,255,0.8)', border: '2px solid #bfdbfe', cursor: 'pointer' }}
+                    >
+                        {isFullscreen ? <Minimize style={{ width: '24px', height: '24px', color: '#64748b' }} /> : <Maximize style={{ width: '24px', height: '24px', color: '#64748b' }} />}
+                    </button>
                     <button
                         onClick={() => setIsLocked(true)}
                         style={{ padding: '12px', borderRadius: '12px', backgroundColor: 'rgba(255,255,255,0.8)', border: '2px solid #bfdbfe', cursor: 'pointer' }}
@@ -257,11 +315,11 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px' }}>
-                            <TimeUnit value={timeLeft.hours} label={t('hour')} />
-                            <span style={{ fontSize: '100px', color: '#93c5fd', fontWeight: '300', lineHeight: 1 }}>:</span>
-                            <TimeUnit value={timeLeft.minutes} label={t('minute')} />
-                            <span style={{ fontSize: '100px', color: '#93c5fd', fontWeight: '300', lineHeight: 1 }}>:</span>
-                            <TimeUnit value={timeLeft.seconds} label={t('second')} />
+                            <TimeUnit value={timeLeft.hours} label={t('hour')} color={theme.text} />
+                            <span style={{ fontSize: '100px', color: theme.text, opacity: 0.45, fontWeight: '300', lineHeight: 1 }}>:</span>
+                            <TimeUnit value={timeLeft.minutes} label={t('minute')} color={theme.text} />
+                            <span style={{ fontSize: '100px', color: theme.text, opacity: 0.45, fontWeight: '300', lineHeight: 1 }}>:</span>
+                            <TimeUnit value={timeLeft.seconds} label={t('second')} color={theme.text} />
                         </div>
 
                         <div style={{ marginTop: '24px', textAlign: 'center' }}>
@@ -321,14 +379,14 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
     );
 }
 
-function TimeUnit({ value, label }: { value: number, label: string }) {
+function TimeUnit({ value, label, color }: { value: number, label: string, color: string }) {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <div style={{
                 backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '20px',
                 boxShadow: '0 15px 50px rgba(59,130,246,0.2)', padding: '20px 32px', border: '2px solid #dbeafe'
             }}>
-                <span style={{ fontSize: '120px', fontWeight: '900', color: '#2563eb', fontFamily: 'monospace', lineHeight: 1 }}>
+                <span style={{ fontSize: '120px', fontWeight: '900', color, fontFamily: 'monospace', lineHeight: 1 }}>
                     {String(value).padStart(2, '0')}
                 </span>
             </div>
