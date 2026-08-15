@@ -6,7 +6,9 @@ services:
     container_name: exam-monitor
     restart: always
     ports:
-      - "3000:3000"
+      # host:container — app listens on 3000 inside the container; expose on 80 by default.
+      # Override the host side with HOST_PORT in .env (e.g. HOST_PORT=8080).
+      - "${HOST_PORT:-80}:3000"
     volumes:
       - /opt/exam-monitor/data:/app/data
     environment:
