@@ -98,8 +98,8 @@ export default function TimeMonitorPreview({
         const total = end - start;
         const remainMs = (timeLeft.hours * 3600 + timeLeft.minutes * 60 + timeLeft.seconds) * 1000;
         const ratio = total > 0 ? remainMs / total : 1;
-        if (remainMs <= 10 * 60000 || ratio <= 0.2) level = 'danger';
-        else if (remainMs <= 30 * 60000 || ratio <= 0.5) level = 'warn';
+        if (ratio <= 0.06) level = 'danger';
+        else if (ratio <= 0.15) level = 'warn';
     }
 
     const levelThemes: any = {

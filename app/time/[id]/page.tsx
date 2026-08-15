@@ -241,8 +241,8 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
         const endMs = new Date(currentSession.endTime).getTime();
         const totalMs = endMs - startMs;
         const ratio = totalMs > 0 ? remainMs / totalMs : 1;
-        if (remainMs <= 10 * 60000 || ratio <= 0.2) level = 'danger';
-        else if (remainMs <= 30 * 60000 || ratio <= 0.5) level = 'warn';
+        if (ratio <= 0.06) level = 'danger';
+        else if (ratio <= 0.15) level = 'warn';
     }
 
     const levelThemes: any = {

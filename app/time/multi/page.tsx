@@ -35,6 +35,7 @@ function ExamMonitorCell({ id }: { id: string }) {
     const [currentSessionName, setCurrentSessionName] = useState('');
     const [currentSessionNameEn, setCurrentSessionNameEn] = useState('');
     const [sessionTimes, setSessionTimes] = useState<{ start: string, end: string } | null>(null);
+    const [remainRatio, setRemainRatio] = useState(1);
     const [currentTimeStr, setCurrentTimeStr] = useState('');
 
     // Server/client clock offset (ms)
@@ -82,6 +83,8 @@ function ExamMonitorCell({ id }: { id: string }) {
 
             const start = new Date(session.startTime).getTime();
             const end = new Date(session.endTime).getTime();
+            const total = end - start;
+            setRemainRatio(total > 0 ? (end - nowTime) / total : 1);
 
             if (nowTime < start) {
                 if (status !== 'WAITING') setStatus('WAITING');
@@ -122,8 +125,8 @@ function ExamMonitorCell({ id }: { id: string }) {
         </div>
     );
 
-    const isUrgent = status === 'RUNNING' && timeLeft.hours === 0 && timeLeft.minutes < 5;
-    const isWarning = status === 'RUNNING' && !isUrgent && timeLeft.hours === 0 && timeLeft.minutes < 30;
+    const isUrgent = status === 'RUNNING' && remainRatio <= 0.06;
+    const isWarning = status === 'RUNNING' && !isUrgent && remainRatio <= 0.15;
 
     const statusColors: any = {
         WAITING: { bg: '#fffbeb', text: '#d97706', border: '#fcd34d', label: t('waiting') },
