@@ -6,6 +6,7 @@ import { Settings, Plus, Layout, Trash2, Clock, Users, Eye, EyeOff, Monitor, Che
 import Link from 'next/link';
 import { useLocale } from '@/lib/LocaleContext';
 import Modal from '@/components/Modal';
+import Footer from '@/components/Footer';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -441,6 +442,8 @@ export default function AdminDashboard() {
                         </>
                     )}
                 </Modal>
+
+                <Footer dark />
             </div>
         </div >
     );

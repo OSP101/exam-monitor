@@ -7,6 +7,7 @@ import { ArrowLeft, Download, FileSearch, FileText, FolderOpen, Search } from 'l
 import useSWR from 'swr';
 import { use } from 'react';
 import { useLocale } from '@/lib/LocaleContext';
+import Footer from '@/components/Footer';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -159,6 +160,8 @@ export default function SubjectResourcesPage({ params }: { params: Promise<{ sub
                     </div>
                 )}
             </div>
+
+            <Footer />
         </div>
     );
 }

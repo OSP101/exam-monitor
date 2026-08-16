@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, BookOpen, Eye, EyeOff, FileText, Search } from 'lucide-react';
 import { useLocale } from '@/lib/LocaleContext';
+import Footer from '@/components/Footer';
 
 type ExamSummary = {
     id: number;
@@ -336,6 +337,8 @@ export default function ResourcesIndexPage() {
                     </div>
                 </div>
             )}
+
+            <Footer />
         </div>
     );
 }

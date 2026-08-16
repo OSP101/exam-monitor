@@ -6,6 +6,7 @@ import { ArrowLeft, Eye, EyeOff, FolderLock, LibraryBig } from 'lucide-react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { useLocale } from '@/lib/LocaleContext';
+import Footer from '@/components/Footer';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -188,6 +189,8 @@ export default function ExamSubjectsPage({ params }: { params: Promise<{ id: str
                     </div>
                 </div>
             )}
+
+            <Footer />
         </div>
     );
 }

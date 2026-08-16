@@ -6,6 +6,7 @@ import useSWR from 'swr';
 import Link from 'next/link';
 import { Monitor, ArrowLeft, Clock, Megaphone, AlertCircle, Maximize, Minimize } from 'lucide-react';
 import { useLocale } from '@/lib/LocaleContext';
+import Footer from '@/components/Footer';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -395,6 +396,8 @@ export default function MultiExamMonitorPage() {
             <Suspense fallback={<div style={{ textAlign: 'center', padding: '100px' }}>Loading...</div>}>
                 <MultiMonitorContent />
             </Suspense>
+
+            <Footer />
 
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>

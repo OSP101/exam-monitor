@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, Download, Eye, EyeOff, FileSearch, FileText, FolderOpen, Search } from 'lucide-react';
 import useSWR from 'swr';
 import { useLocale } from '@/lib/LocaleContext';
+import Footer from '@/components/Footer';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -276,6 +277,8 @@ export default function ExamResourcesPage({ params }: { params: Promise<{ id: st
                     </div>
                 )}
             </div>
+
+            <Footer />
         </div>
     );
 }

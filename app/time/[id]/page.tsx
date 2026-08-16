@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import Link from 'next/link';
 import { Settings, Lock, Unlock, Shield, Megaphone, ArrowLeft, Maximize, Minimize } from 'lucide-react';
 import { useLocale } from '@/lib/LocaleContext';
+import Footer from '@/components/Footer';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -402,6 +403,8 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                 )}
                 <div style={{ fontSize: '14px', color: '#94a3b8' }}>ExamID: {id}</div>
             </footer>
+
+            <Footer dark />
         </div>
     );
 }

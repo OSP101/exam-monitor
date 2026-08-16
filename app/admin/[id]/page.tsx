@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useLocale } from '@/lib/LocaleContext';
 import ExamFilesManager from '@/components/ExamFilesManager';
 import TimeMonitorPreview from '@/components/TimeMonitorPreview';
+import Footer from '@/components/Footer';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -282,7 +283,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
     }
 
     return (
-        <div style={{ minHeight: '100vh', padding: '32px', backgroundColor: '#0f172a', color: 'white' }}>
+        <div style={{ minHeight: '100vh', padding: '32px', paddingBottom: '150px', backgroundColor: '#0f172a', color: 'white' }}>
             <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
                 {/* Navbar */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
@@ -518,6 +519,8 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                         />
                     </div>
                 </div>
+
+                <Footer dark />
 
                 {/* Floating Save Button */}
                 <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '20px', backgroundColor: 'rgba(15,23,42,0.9)', borderTop: '1px solid #334155', display: 'flex', justifyContent: 'center', gap: '20px', zIndex: 100 }}>
