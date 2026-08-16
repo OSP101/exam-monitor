@@ -5,10 +5,9 @@ services:
       dockerfile: Dockerfile
     container_name: exam-monitor
     restart: always
-    ports:
-      # host:container — app listens on 3000 inside the container; expose on 80 by default.
-      # Override the host side with HOST_PORT in .env (e.g. HOST_PORT=8080).
-      - "${HOST_PORT:-80}:3000"
+    # The app is only reachable through the nginx reverse proxy (HTTPS).
+    expose:
+      - "3000"
     volumes:
       - /opt/exam-monitor/data:/app/data
     environment:
@@ -18,3 +17,19 @@ services:
       # Without them the app falls back to insecure defaults.
       - ADMIN_MASTER_PIN=${ADMIN_MASTER_PIN}
       - ADMIN_SESSION_SECRET=${ADMIN_SESSION_SECRET}
+
+  nginx:
+    image: nginx:alpine
+    container_name: exam-monitor-nginx
+    restart: always
+    depends_on:
+      - app
+    ports:
+      # HTTPS entry point. HTTP (80) redirects to HTTPS.
+      # First-time setup: run ./scripts/gen-ssl-cert.sh to create ./certs.
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+      - ./certbot-www:/var/www/certbot

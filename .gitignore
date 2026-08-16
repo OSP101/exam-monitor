@@ -40,6 +40,10 @@ yarn-error.log*
 # local runtime data (SQLite DB + uploaded exam files) - keep on server volume
 /data
 
+# TLS certificates + ACME challenge dir (generated on the server, never commit)
+/certs/
+/certbot-www/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
