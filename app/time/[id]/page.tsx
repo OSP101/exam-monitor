@@ -402,7 +402,7 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                     </span>
                 )}
                 <div style={{ fontSize: '14px', color: '#94a3b8' }}><p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>
-                © {new Date().getFullYear()} College of Computing, Khon Kaen University Developed by{' '}
+                © {new Date().getFullYear()} CP-KKU | Developed by{' '}
                 <a
                     href="https://osp101.com/"
                     target="_blank"
@@ -414,7 +414,7 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
             </p></div>
             </footer>
 
-            <Footer dark />
+            {/* <Footer dark /> */}
         </div>
     );
 }
