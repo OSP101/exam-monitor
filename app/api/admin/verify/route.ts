@@ -30,10 +30,10 @@ export async function POST(request: Request) {
         } else if (examId) {
             const row = db.prepare('SELECT admin_pin FROM exams WHERE id = ?').get(examId) as any;
             ok = !!(row && row.admin_pin === adminPin);
-        } else {
-            const row = db.prepare('SELECT COUNT(*) as c FROM exams WHERE admin_pin = ?').get(adminPin) as any;
-            ok = !!(row && row.c > 0);
         }
+        // No examId means this is the general /admin dashboard login, which grants a
+        // full session cookie with access to every exam — only the true master PIN
+        // may authenticate here. A single exam's own admin_pin must not escalate to it.
 
         if (ok) {
             clearAttempts(rateKey);

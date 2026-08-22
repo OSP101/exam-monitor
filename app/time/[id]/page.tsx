@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, use } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { Settings, Lock, Unlock, Shield, Megaphone, ArrowLeft, Maximize, Minimize } from 'lucide-react';
+import { Settings, Lock, Unlock, Shield, Megaphone, ArrowLeft, Maximize, Minimize, Bell, X, Play, CheckCircle2, AlertTriangle, Check } from 'lucide-react';
 import { useLocale } from '@/lib/LocaleContext';
 import Footer from '@/components/Footer';
 
@@ -34,20 +34,53 @@ const colorFromRatio = (ratio: number) => {
     return lerpColor(RED, DARK_RED, (0.06 - ratio) / 0.06);
 };
 
+// Sound alert settings
+type AlertKey = 'hr1' | 'min30' | 'min10' | 'min5';
+type EventKey = 'start' | 'timeout';
+interface SoundSettings {
+    enabled: boolean;
+    tested: boolean;
+    alerts: Record<AlertKey, boolean>;
+    events: Record<EventKey, boolean>;
+}
+const ALERT_DEFS: { key: AlertKey; minutes: number; file: string; label: string; label_en: string }[] = [
+    { key: 'hr1', minutes: 60, file: '/sound/1hr-1.mp3', label: 'เหลือ 1 ชั่วโมง', label_en: '1 hour left' },
+    { key: 'min30', minutes: 30, file: '/sound/30min-1.mp3', label: 'เหลือ 30 นาที', label_en: '30 minutes left' },
+    { key: 'min10', minutes: 10, file: '/sound/10min-1.mp3', label: 'เหลือ 10 นาที', label_en: '10 minutes left' },
+    { key: 'min5', minutes: 5, file: '/sound/5min-1.mp3', label: 'เหลือ 5 นาที', label_en: '5 minutes left' },
+];
+const EVENT_DEFS: { key: EventKey; file: string; label: string; label_en: string }[] = [
+    { key: 'start', file: '/sound/startexam-1.mp3', label: 'เริ่มสอบ', label_en: 'Exam starts' },
+    { key: 'timeout', file: '/sound/timeout-1.mp3', label: 'หมดเวลาสอบ', label_en: 'Time is up' },
+];
+// Played instead of EVENT_DEFS['timeout'].file when another session follows immediately after —
+// avoids telling students to leave the room when a next round is about to start in the same seat.
+const TIMEOUT_TRANSITION_FILE = '/sound/timeout-to-next.mp3';
+const TEST_SOUND_FILE = '/sound/test-1.mp3';
+const DEFAULT_SOUND_SETTINGS: SoundSettings = {
+    enabled: false,
+    tested: false,
+    alerts: { hr1: false, min30: false, min10: false, min5: false },
+    events: { start: false, timeout: false },
+};
+
 export default function TimePage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     // Real-time sync: refresh every 3 seconds
     const { data: config } = useSWR(`/api/exams/${id}`, fetcher, { refreshInterval: 3000 });
     const { locale, setLocale, t } = useLocale();
 
-    // Server/client clock offset (ms) so the countdown matches the server even
-    // if the projector machine's clock is wrong.
+    // Server/client clock offset (ms) so the countdown matches the server even if the
+    // projector machine's clock is wrong. Polled separately from the exam config (and
+    // much less often, since clock drift doesn't change second-to-second) so that the
+    // config poll's response can stay dedup-able by SWR.
+    const { data: serverTimeData } = useSWR('/api/server-time', fetcher, { refreshInterval: 30000 });
     const serverOffsetRef = useRef(0);
     useEffect(() => {
-        if (typeof config?.serverTime === 'number') {
-            serverOffsetRef.current = config.serverTime - Date.now();
+        if (typeof serverTimeData?.time === 'number') {
+            serverOffsetRef.current = serverTimeData.time - Date.now();
         }
-    }, [config]);
+    }, [serverTimeData]);
 
     const [isLocked, setIsLocked] = useState(true);
     const [pin, setPin] = useState('');
@@ -73,6 +106,71 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
     const [status, setStatus] = useState<'WAITING' | 'RUNNING' | 'EXPIRED'>('WAITING');
     const [currentTime, setCurrentTime] = useState('');
 
+    // Sound alert settings (per-exam, stored locally on this projector/computer)
+    const [soundSettings, setSoundSettings] = useState<SoundSettings>(DEFAULT_SOUND_SETTINGS);
+    const [soundModalOpen, setSoundModalOpen] = useState(false);
+    const [soundDraft, setSoundDraft] = useState<SoundSettings | null>(null);
+    const [testingSound, setTestingSound] = useState(false);
+    const firedAlertsRef = useRef<Set<AlertKey>>(new Set());
+    const firedEventsRef = useRef<Set<EventKey>>(new Set());
+    const soundSettingsRef = useRef(soundSettings);
+    useEffect(() => { soundSettingsRef.current = soundSettings; }, [soundSettings]);
+
+    // Plays alert/event sounds one at a time (never overlapping) — matters when a
+    // session's "time's up" sound and the next session's "start" sound land close together.
+    const soundQueueRef = useRef<Promise<void>>(Promise.resolve());
+    const enqueueSound = (file: string) => {
+        soundQueueRef.current = soundQueueRef.current.then(() => new Promise<void>(resolve => {
+            const audio = new Audio(file);
+            const done = () => resolve();
+            audio.addEventListener('ended', done, { once: true });
+            audio.addEventListener('error', done, { once: true });
+            audio.play().catch(done);
+            setTimeout(done, 20000);
+        }));
+    };
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(`examSound:${id}`);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                setSoundSettings({
+                    ...DEFAULT_SOUND_SETTINGS,
+                    ...parsed,
+                    alerts: { ...DEFAULT_SOUND_SETTINGS.alerts, ...parsed.alerts },
+                    events: { ...DEFAULT_SOUND_SETTINGS.events, ...parsed.events },
+                });
+            }
+        } catch { /* ignore malformed/inaccessible storage */ }
+    }, [id]);
+
+    const openSoundModal = () => {
+        setSoundDraft({ ...soundSettings, alerts: { ...soundSettings.alerts }, events: { ...soundSettings.events } });
+        setSoundModalOpen(true);
+    };
+    const closeSoundModal = () => {
+        setSoundModalOpen(false);
+        setSoundDraft(null);
+        setTestingSound(false);
+    };
+    const toggleSoundEnabled = () => {
+        setSoundDraft(d => d ? { ...d, enabled: !d.enabled } : d);
+    };
+    const playTestSound = () => {
+        if (testingSound) return;
+        setTestingSound(true);
+        const audio = new Audio(TEST_SOUND_FILE);
+        const finish = () => {
+            setTestingSound(false);
+            setSoundDraft(d => d ? { ...d, tested: true } : d);
+        };
+        audio.addEventListener('ended', finish, { once: true });
+        audio.addEventListener('error', finish, { once: true });
+        audio.play().catch(finish);
+        setTimeout(finish, 6000);
+    };
+
     // Helper to find the best session to display based on current time
     const getActiveSessionIndex = (sessions: any[]) => {
         if (!sessions || sessions.length === 0) return 0;
@@ -85,9 +183,18 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
             return now >= start && now < end;
         });
 
-        // 2. If nothing running, find the NEXT UPCOMING session
+        // 2. If nothing running, find the NEXT UPCOMING session — the one that starts
+        // soonest, not just the first one in array order (sessions aren't guaranteed
+        // to be stored chronologically, e.g. if added or edited out of order).
         if (idx === -1) {
-            idx = sessions.findIndex((s: any) => new Date(s.startTime).getTime() > now);
+            let soonestStart = Infinity;
+            sessions.forEach((s: any, i: number) => {
+                const start = new Date(s.startTime).getTime();
+                if (start > now && start < soonestStart) {
+                    soonestStart = start;
+                    idx = i;
+                }
+            });
         }
 
         // 3. Fallback to the LAST session if everything is in the past
@@ -108,12 +215,72 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
 
     const currentSession = config?.sessions?.[currentSessionIndex];
 
+    // Identity of the displayed session (its own db id, falling back to a start+end
+    // composite) — NOT the array index, which can be reused by a different session
+    // after one earlier in the list is deleted. Resetting fired alerts/events by index
+    // alone would let a new session silently inherit another session's already-fired flags.
+    const currentSessionKey = currentSession ? String(currentSession.id ?? `${currentSession.startTime}|${currentSession.endTime}`) : null;
+    useEffect(() => {
+        firedAlertsRef.current = new Set();
+        firedEventsRef.current = new Set();
+    }, [currentSessionKey]);
+
+    const sessionDurationMinutes = currentSession
+        ? Math.round((new Date(currentSession.endTime).getTime() - new Date(currentSession.startTime).getTime()) / 60000)
+        : 0;
+
+    const toggleSoundAlert = (key: AlertKey, minutes: number) => {
+        setSoundDraft(d => {
+            if (!d || !d.tested) return d;
+            if (minutes > sessionDurationMinutes) return d;
+            return { ...d, alerts: { ...d.alerts, [key]: !d.alerts[key] } };
+        });
+    };
+    const toggleSoundEvent = (key: EventKey) => {
+        setSoundDraft(d => {
+            if (!d || !d.tested) return d;
+            return { ...d, events: { ...d.events, [key]: !d.events[key] } };
+        });
+    };
+    const applySoundSettings = () => {
+        if (!soundDraft) return;
+        if (soundDraft.enabled && !soundDraft.tested) return;
+        const alerts = { ...soundDraft.alerts };
+        ALERT_DEFS.forEach(a => { if (a.minutes > sessionDurationMinutes) alerts[a.key] = false; });
+        const finalSettings: SoundSettings = { ...soundDraft, alerts };
+        setSoundSettings(finalSettings);
+        try { localStorage.setItem(`examSound:${id}`, JSON.stringify(finalSettings)); } catch { /* ignore */ }
+        closeSoundModal();
+    };
+
     // Timer calculation
     useEffect(() => {
         if (!currentSession) return;
 
         const calculateTime = () => {
             const now = Date.now() + serverOffsetRef.current;
+            const activeSoundSettings = soundSettingsRef.current;
+
+            const fireEvent = (key: EventKey, file: string) => {
+                if (!activeSoundSettings.enabled) return;
+                if (!activeSoundSettings.events[key]) return;
+                if (firedEventsRef.current.has(key)) return;
+                firedEventsRef.current.add(key);
+                enqueueSound(file);
+            };
+
+            const start = new Date(currentSession.startTime).getTime();
+            const end = new Date(currentSession.endTime).getTime();
+
+            // Fire "time's up" for THIS session as soon as it ends, before checking
+            // whether the display is about to auto-advance to the next session —
+            // otherwise a session with another one right after would skip this sound entirely.
+            if (now >= end) {
+                const isLastSession = currentSessionIndex === (config?.sessions?.length ?? 1) - 1;
+                const timeoutDef = EVENT_DEFS.find(e => e.key === 'timeout');
+                const timeoutFile = isLastSession ? (timeoutDef?.file ?? '/sound/timeout-1.mp3') : TIMEOUT_TRANSITION_FILE;
+                fireEvent('timeout', timeoutFile);
+            }
 
             // Re-check if we should be on a different session (automatic transition)
             if (config?.sessions) {
@@ -123,9 +290,6 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                     return; // Next interval will pick up the new session
                 }
             }
-
-            const start = new Date(currentSession.startTime).getTime();
-            const end = new Date(currentSession.endTime).getTime();
 
             if (now < start) {
                 setStatus('WAITING');
@@ -143,6 +307,30 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                     minutes: Math.floor((diff / 1000 / 60) % 60),
                     seconds: Math.floor((diff / 1000) % 60),
                 });
+
+                const startDef = EVENT_DEFS.find(e => e.key === 'start');
+                fireEvent('start', startDef?.file ?? '/sound/startexam-1.mp3');
+
+                if (activeSoundSettings.enabled) {
+                    const remainSeconds = Math.floor(diff / 1000);
+                    // A backgrounded/throttled tab can skip straight past a threshold by
+                    // several minutes before its next tick. Only actually play the sound
+                    // if we caught it close to the moment it crossed — a stale threshold
+                    // (way past due) is marked fired silently instead of playing a "1 hour
+                    // left" cue when only a few minutes actually remain.
+                    const STALE_ALERT_MARGIN_SECONDS = 90;
+                    ALERT_DEFS.forEach(a => {
+                        if (!activeSoundSettings.alerts[a.key]) return;
+                        if (firedAlertsRef.current.has(a.key)) return;
+                        if (remainSeconds <= a.minutes * 60) {
+                            firedAlertsRef.current.add(a.key);
+                            const staleness = a.minutes * 60 - remainSeconds;
+                            if (staleness <= STALE_ALERT_MARGIN_SECONDS) {
+                                enqueueSound(a.file);
+                            }
+                        }
+                    });
+                }
             } else {
                 setStatus('EXPIRED');
                 setTimeLeft({ hours: 0, minutes: 0, seconds: 0 });
@@ -293,6 +481,10 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                     50% { box-shadow: inset 0 0 0 14px ${theme.ring}, inset 0 0 90px 0 ${theme.glow}; }
                     100% { box-shadow: inset 0 0 0 5px ${theme.glow}, inset 0 0 30px 0 rgba(239,68,68,0); }
                 }
+                @keyframes sound-bar {
+                    0%, 100% { transform: scaleY(0.3); }
+                    50% { transform: scaleY(1); }
+                }
             `}</style>
             <div style={{
                 position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 60,
@@ -318,6 +510,18 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                         style={{ padding: '12px', borderRadius: '12px', backgroundColor: 'rgba(255,255,255,0.8)', border: '2px solid #bfdbfe', cursor: 'pointer' }}
                     >
                         {isFullscreen ? <Minimize style={{ width: '24px', height: '24px', color: '#64748b' }} /> : <Maximize style={{ width: '24px', height: '24px', color: '#64748b' }} />}
+                    </button>
+                    <button
+                        onClick={openSoundModal}
+                        title={soundSettings.enabled
+                            ? (locale === 'th' ? `ตั้งค่าเสียงเตือน (เปิดใช้งาน • ${Object.values(soundSettings.alerts).filter(Boolean).length + Object.values(soundSettings.events).filter(Boolean).length} จุด)` : `Sound alerts (on • ${Object.values(soundSettings.alerts).filter(Boolean).length + Object.values(soundSettings.events).filter(Boolean).length} set)`)
+                            : (locale === 'th' ? 'ตั้งค่าเสียงเตือน' : 'Sound alert settings')}
+                        style={{ position: 'relative', padding: '12px', borderRadius: '12px', backgroundColor: soundSettings.enabled ? 'rgba(59,130,246,0.12)' : 'rgba(255,255,255,0.8)', border: `2px solid ${soundSettings.enabled ? '#3b82f6' : '#bfdbfe'}`, cursor: 'pointer' }}
+                    >
+                        <Bell style={{ width: '24px', height: '24px', color: soundSettings.enabled ? '#3b82f6' : '#64748b' }} />
+                        {soundSettings.enabled && (
+                            <span style={{ position: 'absolute', top: '6px', right: '6px', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#22c55e', border: '2px solid white' }} />
+                        )}
                     </button>
                     <button
                         onClick={() => setIsLocked(true)}
@@ -413,6 +617,173 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                 </a>
             </p></div>
             </footer>
+
+            {soundModalOpen && soundDraft && (
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '24px' }}>
+                    <div style={{ width: '100%', maxWidth: '560px', maxHeight: '85vh', overflowY: 'auto', backgroundColor: 'white', borderRadius: '24px', padding: '36px', boxShadow: '0 25px 50px rgba(59,130,246,0.25)', border: '2px solid #bfdbfe' }}>
+
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                <div style={{ padding: '12px', borderRadius: '16px', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', boxShadow: '0 8px 20px rgba(59,130,246,0.35)' }}>
+                                    <Bell style={{ width: '24px', height: '24px', color: 'white' }} />
+                                </div>
+                                <div>
+                                    <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold', color: '#1e40af' }}>{locale === 'th' ? 'ตั้งค่าเสียงเตือน' : 'Sound Alert Settings'}</h2>
+                                    <p style={{ margin: '2px 0 0', fontSize: '14px', color: '#94a3b8' }}>
+                                        {locale === 'en' ? (config.title_en || config.examTitle) : config.examTitle}
+                                        {currentSession ? ` · ${locale === 'th' ? `รอบ ${currentSessionIndex + 1}/${config.sessions.length}` : `Session ${currentSessionIndex + 1}/${config.sessions.length}`}` : ''}
+                                    </p>
+                                </div>
+                            </div>
+                            <button onClick={closeSoundModal} style={{ padding: '8px', borderRadius: '10px', border: 'none', backgroundColor: '#f1f5f9', cursor: 'pointer' }}>
+                                <X style={{ width: '18px', height: '18px', color: '#64748b' }} />
+                            </button>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', backgroundColor: '#f8fafc', borderRadius: '16px', border: '2px solid #e2e8f0', marginBottom: '18px' }}>
+                            <div>
+                                <p style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#334155' }}>{locale === 'th' ? 'เปิดใช้งานเสียงเตือน' : 'Enable sound alerts'}</p>
+                                <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#94a3b8' }}>{locale === 'th' ? 'เล่นเสียงเตือนอัตโนมัติเมื่อใกล้หมดเวลาสอบ (เฉพาะห้องนี้)' : 'Automatically play a sound as the exam nears its end (this room only)'}</p>
+                            </div>
+                            <div onClick={toggleSoundEnabled} style={{ width: '52px', height: '30px', borderRadius: '999px', backgroundColor: soundDraft.enabled ? '#3b82f6' : '#cbd5e1', position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background-color 0.15s ease' }}>
+                                <div style={{ position: 'absolute', top: '3px', left: soundDraft.enabled ? '25px' : '3px', width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.25)', transition: 'left 0.15s ease' }} />
+                            </div>
+                        </div>
+
+                        {soundDraft.enabled ? (
+                            <div>
+                                <div style={{ padding: '18px', borderRadius: '16px', border: '2px solid #dbeafe', backgroundColor: '#eff6ff', marginBottom: '18px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <p style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#1e40af' }}>{locale === 'th' ? 'ทดสอบเสียง' : 'Test sound'}</p>
+                                            <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b', lineHeight: 1.4 }}>{locale === 'th' ? 'กดทดสอบเพื่อปรับระดับเสียงลำโพง/คอมพิวเตอร์ในห้องสอบให้ดังพอดีก่อนเริ่มสอบจริง' : 'Play a test sound to set the room speaker volume before the exam starts'}</p>
+                                        </div>
+                                        <button
+                                            onClick={playTestSound}
+                                            disabled={testingSound}
+                                            style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', borderRadius: '12px', border: 'none', cursor: testingSound ? 'default' : 'pointer', fontWeight: 'bold', fontSize: '14px', backgroundColor: testingSound ? '#3b82f6' : (soundDraft.tested ? '#f1f5f9' : '#3b82f6'), color: testingSound ? 'white' : (soundDraft.tested ? '#334155' : 'white') }}
+                                        >
+                                            {testingSound ? (
+                                                <>
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: '3px', height: '16px' }}>
+                                                        <span style={{ width: '4px', height: '16px', backgroundColor: 'white', borderRadius: '4px', display: 'inline-block', animation: 'sound-bar 0.9s ease-in-out infinite' }} />
+                                                        <span style={{ width: '4px', height: '16px', backgroundColor: 'white', borderRadius: '4px', display: 'inline-block', animation: 'sound-bar 0.9s ease-in-out infinite 0.15s' }} />
+                                                        <span style={{ width: '4px', height: '16px', backgroundColor: 'white', borderRadius: '4px', display: 'inline-block', animation: 'sound-bar 0.9s ease-in-out infinite 0.3s' }} />
+                                                    </span>
+                                                    {locale === 'th' ? 'กำลังเล่น...' : 'Playing...'}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Play style={{ width: '16px', height: '16px' }} />
+                                                    {soundDraft.tested ? (locale === 'th' ? 'ทดสอบอีกครั้ง' : 'Test again') : (locale === 'th' ? 'ทดสอบเสียง' : 'Play test sound')}
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                    {soundDraft.tested && !testingSound && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '12px', color: '#047857', fontSize: '13px', fontWeight: 600 }}>
+                                            <CheckCircle2 style={{ width: '16px', height: '16px' }} />
+                                            {locale === 'th' ? 'ทดสอบเสียงแล้ว — ปรับระดับเสียงเรียบร้อย' : 'Sound tested — volume is set'}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div style={{ borderTop: '2px solid #e2e8f0', paddingTop: '16px', marginBottom: '16px' }}>
+                                    <p style={{ margin: '0 0 10px', fontSize: '15px', fontWeight: 600, color: '#334155' }}>{locale === 'th' ? 'เสียงแจ้งเหตุการณ์สำคัญ' : 'Key event sounds'}</p>
+
+                                    {soundDraft.tested ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            {EVENT_DEFS.map(ev => {
+                                                const checked = soundDraft.events[ev.key];
+                                                return (
+                                                    <div key={ev.key} onClick={() => toggleSoundEvent(ev.key)} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '12px', backgroundColor: checked ? 'rgba(59,130,246,0.08)' : 'transparent', cursor: 'pointer' }}>
+                                                        <div style={{ width: '22px', height: '22px', borderRadius: '7px', border: `2px solid ${checked ? '#3b82f6' : '#cbd5e1'}`, backgroundColor: checked ? '#3b82f6' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                            {checked && <Check style={{ width: '14px', height: '14px', color: 'white' }} />}
+                                                        </div>
+                                                        <span style={{ fontSize: '15px', fontWeight: 500, color: '#334155' }}>{locale === 'th' ? ev.label : ev.label_en}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '16px', borderRadius: '12px', backgroundColor: '#f8fafc', border: '2px dashed #cbd5e1', color: '#94a3b8', fontSize: '14px' }}>
+                                            <Lock style={{ width: '18px', height: '18px' }} />
+                                            {locale === 'th' ? 'กรุณาทดสอบเสียงก่อน จึงจะเลือกเสียงเหตุการณ์ได้' : 'Test the sound first to choose event sounds'}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div style={{ borderTop: '2px solid #e2e8f0', paddingTop: '16px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                        <p style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#334155' }}>{locale === 'th' ? 'เตือนเมื่อเหลือเวลา' : 'Remind when time remaining is'}</p>
+                                        {soundDraft.tested && (
+                                            <span style={{ fontSize: '13px', color: '#64748b' }}>
+                                                {locale === 'th' ? `เลือกแล้ว ${Object.values(soundDraft.alerts).filter(Boolean).length} จุด` : `${Object.values(soundDraft.alerts).filter(Boolean).length} selected`}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {soundDraft.tested ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            {ALERT_DEFS.map(a => {
+                                                const disabled = a.minutes > sessionDurationMinutes;
+                                                const checked = soundDraft.alerts[a.key];
+                                                return (
+                                                    <div key={a.key} style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '12px 14px', borderRadius: '12px', backgroundColor: checked ? 'rgba(59,130,246,0.08)' : (disabled ? '#f8fafc' : 'transparent') }}>
+                                                        <div onClick={() => toggleSoundAlert(a.key, a.minutes)} style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: disabled ? 'not-allowed' : 'pointer' }}>
+                                                            <div style={{ width: '22px', height: '22px', borderRadius: '7px', border: `2px solid ${disabled ? '#e2e8f0' : (checked ? '#3b82f6' : '#cbd5e1')}`, backgroundColor: checked && !disabled ? '#3b82f6' : (disabled ? '#f1f5f9' : 'white'), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                                {checked && !disabled && <Check style={{ width: '14px', height: '14px', color: 'white' }} />}
+                                                            </div>
+                                                            <span style={{ fontSize: '15px', fontWeight: 500, color: disabled ? '#cbd5e1' : '#334155' }}>{locale === 'th' ? a.label : a.label_en}</span>
+                                                        </div>
+                                                        {disabled && (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '34px', color: '#b45309', fontSize: '12px' }}>
+                                                                <AlertTriangle style={{ width: '13px', height: '13px' }} />
+                                                                {locale === 'th'
+                                                                    ? `ต้องการรอบสอบอย่างน้อย ${a.minutes} นาที (รอบนี้ยาว ${sessionDurationMinutes} นาที)`
+                                                                    : `Needs a session of at least ${a.minutes} min (this session is ${sessionDurationMinutes} min)`}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '16px', borderRadius: '12px', backgroundColor: '#f8fafc', border: '2px dashed #cbd5e1', color: '#94a3b8', fontSize: '14px' }}>
+                                            <Lock style={{ width: '18px', height: '18px' }} />
+                                            {locale === 'th' ? 'กรุณาทดสอบเสียงก่อน จึงจะเลือกช่วงเวลาเตือนได้' : 'Test the sound first to choose alert times'}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ padding: '16px', borderRadius: '12px', backgroundColor: '#f8fafc', border: '2px solid #e2e8f0', color: '#94a3b8', fontSize: '14px', textAlign: 'center' }}>
+                                {locale === 'th' ? 'เสียงเตือนถูกปิดใช้งานสำหรับห้องสอบนี้' : 'Sound alerts are disabled for this room'}
+                            </div>
+                        )}
+
+                        <div style={{ marginTop: '22px' }}>
+                            {soundDraft.enabled && !soundDraft.tested && (
+                                <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#dc2626', textAlign: 'right' }}>
+                                    {locale === 'th' ? 'กรุณาทดสอบเสียงก่อนกด "นำไปใช้"' : 'Please test the sound before applying'}
+                                </p>
+                            )}
+                            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                                <button onClick={closeSoundModal} style={{ padding: '12px 22px', borderRadius: '12px', border: '2px solid #e2e8f0', backgroundColor: 'white', color: '#64748b', fontWeight: 600, fontSize: '15px', cursor: 'pointer' }}>
+                                    {locale === 'th' ? 'ยกเลิก' : 'Cancel'}
+                                </button>
+                                <button
+                                    onClick={applySoundSettings}
+                                    disabled={soundDraft.enabled && !soundDraft.tested}
+                                    style={{ padding: '12px 26px', borderRadius: '12px', border: 'none', fontWeight: 'bold', fontSize: '15px', cursor: (soundDraft.enabled && !soundDraft.tested) ? 'not-allowed' : 'pointer', background: (soundDraft.enabled && !soundDraft.tested) ? '#94a3b8' : 'linear-gradient(135deg, #3b82f6, #6366f1)', color: 'white', opacity: (soundDraft.enabled && !soundDraft.tested) ? 0.7 : 1 }}
+                                >
+                                    {locale === 'th' ? 'นำไปใช้' : 'Apply'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* <Footer dark /> */}
         </div>

@@ -1,56 +1,60 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
+import fsSync from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
-import { getExamById, updateExamConfig, deleteExam } from '@/lib/db';
+import { getExamById, updateExamConfig, deleteExam, ConfigConflictError } from '@/lib/db';
 import { isAdminAuthenticated, verifyAdminPin } from '@/lib/auth';
 import { toPublicExam } from '@/lib/exam-serializer';
 
 // small helper to list files for an exam folder
-const listExamFiles = (examId: string) => {
+// Async (fs/promises) so this walk never blocks Node's single event loop —
+// this endpoint is polled every 3s by every open exam room simultaneously,
+// and a synchronous walk of one exam's files would stall every other room's countdown.
+const listExamFiles = async (examId: string) => {
     const dataDir = path.resolve(process.cwd(), 'data');
     const examDir = path.join(dataDir, examId);
     const results: any[] = [];
-    if (!fs.existsSync(examDir)) return results;
+    if (!fsSync.existsSync(examDir)) return results;
 
-    const walk = (dir: string) => {
-        const items = fs.readdirSync(dir);
-        for (const it of items) {
+    const walk = async (dir: string) => {
+        const items = await fs.readdir(dir);
+        await Promise.all(items.map(async (it) => {
             const filePath = path.join(dir, it);
-            const stat = fs.statSync(filePath);
+            const stat = await fs.stat(filePath);
             if (stat.isDirectory()) {
-                walk(filePath);
+                await walk(filePath);
             } else {
                 const relPath = path.relative(examDir, filePath).replace(/\\/g, '/');
                 const fullPath = path.relative(dataDir, filePath).replace(/\\/g, '/');
                 results.push({ name: it, path: relPath, fullPath, size: stat.size, type: 'file' });
             }
-        }
+        }));
     };
 
-    walk(examDir);
+    await walk(examDir);
     return results;
 };
 
-const countFilesInFolder = (folder: string) => {
+const countFilesInFolder = async (folder: string) => {
     const dataDir = path.resolve(process.cwd(), 'data');
     const targetDir = path.resolve(dataDir, folder);
-    if (!targetDir.startsWith(dataDir) || !fs.existsSync(targetDir)) return 0;
+    if (!targetDir.startsWith(dataDir) || !fsSync.existsSync(targetDir)) return 0;
 
     let count = 0;
-    const walk = (dir: string) => {
-        const items = fs.readdirSync(dir, { withFileTypes: true });
-        for (const item of items) {
-            if (item.name.startsWith('.')) continue;
+    const walk = async (dir: string) => {
+        const items = await fs.readdir(dir, { withFileTypes: true });
+        await Promise.all(items.map(async (item) => {
+            if (item.name.startsWith('.')) return;
             const itemPath = path.join(dir, item.name);
             if (item.isDirectory()) {
-                walk(itemPath);
+                await walk(itemPath);
             } else {
                 count += 1;
             }
-        }
+        }));
     };
 
-    walk(targetDir);
+    await walk(targetDir);
     return count;
 };
 
@@ -64,18 +68,22 @@ export async function GET(
         if (!exam) {
             return NextResponse.json({ error: 'Exam not found' }, { status: 404 });
         }
-        const files = listExamFiles(String(id));
+        const files = await listExamFiles(String(id));
         const sharingEnabled = !!((exam as any).fileSharingEnabled || (exam as any).file_sharing_enabled || files.length > 0);
-        const subjectsWithDocuments = exam.subjects.map((subject: any) => {
-            const documentCount = countFilesInFolder(subject.folder);
+        const subjectsWithDocuments = await Promise.all(exam.subjects.map(async (subject: any) => {
+            const documentCount = await countFilesInFolder(subject.folder);
             return {
                 ...subject,
                 documentCount,
                 hasDocuments: documentCount > 0,
             };
-        });
+        }));
 
-        const fullExam = { ...exam, fileSharingEnabled: sharingEnabled, files, subjects: subjectsWithDocuments, serverTime: Date.now() };
+        // No per-request timestamp here (e.g. serverTime) — this response must stay
+        // deep-equal-stable across polls when nothing actually changed, or SWR can
+        // never dedupe it and every consumer re-renders/re-syncs on every 3s poll for
+        // no reason. Clock-offset correction is served separately by /api/server-time.
+        const fullExam = { ...exam, fileSharingEnabled: sharingEnabled, files, subjects: subjectsWithDocuments };
         if (isAdminAuthenticated(request)) {
             return NextResponse.json(fullExam);
         }
@@ -103,6 +111,12 @@ export async function POST(
         const updatedExam = updateExamConfig(id, updateData);
         return NextResponse.json({ success: true, exam: updatedExam });
     } catch (error: any) {
+        if (error instanceof ConfigConflictError) {
+            return NextResponse.json(
+                { error: 'conflict', message: error.message, currentUpdatedAt: error.currentUpdatedAt },
+                { status: 409 }
+            );
+        }
         console.error('Error updating exam:', error);
         return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
     }

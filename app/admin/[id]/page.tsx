@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, useRef, use } from 'react';
 import useSWR from 'swr';
 import { Settings, Save, Lock, Megaphone, Clock, Plus, Trash2, ArrowLeft, FolderLock, ShieldCheck, Eye, EyeOff, Languages } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -26,6 +26,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
     const [errorMsg, setErrorMsg] = useState('');
     const [saving, setSaving] = useState(false);
     const [saveMsg, setSaveMsg] = useState('');
+    const [saveConflict, setSaveConflict] = useState(false);
 
     const [formData, setFormData] = useState<any>({
         examTitle: '',
@@ -37,19 +38,47 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
         subjects: []
     });
 
+    // Only seed formData from the server once per exam (on first load, or when
+    // navigating to a different exam id). SWR revalidates `exam` in the background
+    // (on window focus, reconnect, etc.) and returns a new object reference each
+    // time even when nothing changed; re-running this on every revalidation would
+    // silently clobber any in-progress, unsaved edits with stale server data.
+    const loadedExamIdRef = useRef<number | string | null>(null);
+    // The exam's updated_at as of the copy we last loaded/saved — sent back on save
+    // so the server can detect a conflicting save from elsewhere in between.
+    const loadedUpdatedAtRef = useRef<number>(0);
+    const seedFormFromExam = (source: any) => {
+        loadedExamIdRef.current = source.id;
+        loadedUpdatedAtRef.current = source.updatedAt || 0;
+        setFormData({
+            examTitle: source.examTitle || '',
+            title_en: source.title_en || '',
+            adminPin: source.adminPin || '',
+            sessions: source.sessions || [],
+            announcements: source.announcements || [],
+            subjects: source.subjects || [],
+            accessCode: source.accessCode || ''
+        });
+    };
     useEffect(() => {
-        if (exam) {
-            setFormData({
-                examTitle: exam.examTitle || '',
-                title_en: exam.title_en || '',
-                adminPin: exam.adminPin || '',
-                sessions: exam.sessions || [],
-                announcements: exam.announcements || [],
-                subjects: exam.subjects || [],
-                accessCode: exam.accessCode || ''
-            });
+        if (exam && loadedExamIdRef.current !== exam.id) {
+            seedFormFromExam(exam);
         }
     }, [exam]);
+
+    // Explicit, admin-initiated action to pull in the latest server state after a
+    // save conflict — never done automatically, since that would silently discard
+    // whatever the admin was in the middle of editing. Reads mutate()'s resolved
+    // value directly rather than waiting on the effect above: if the refetched data
+    // happens to be deep-equal to what's already cached (e.g. someone else's save
+    // hasn't landed here yet), SWR won't hand back a new `exam` reference at all,
+    // so the effect would never re-fire and loadedUpdatedAtRef would stay stale.
+    const loadLatestFromServer = async () => {
+        setSaveMsg('');
+        setSaveConflict(false);
+        const fresh = await mutate();
+        if (fresh) seedFormFromExam(fresh);
+    };
 
     const isAuthenticated = !!exam?.adminPin;
 
@@ -80,15 +109,20 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
 
         setSaving(true);
         setSaveMsg('');
+        setSaveConflict(false);
         try {
             const { fileSharingEnabled, ...payload } = formData;
             const res = await fetch(`/api/exams/${id}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...payload, adminPinInput: pin })
+                body: JSON.stringify({ ...payload, adminPinInput: pin, expectedUpdatedAt: loadedUpdatedAtRef.current })
             });
 
             if (res.ok) {
+                const data = await res.json();
+                // Remember the new updated_at so the *next* save's conflict check
+                // compares against what we just wrote, not the copy from page load.
+                loadedUpdatedAtRef.current = data?.exam?.updatedAt || Date.now();
                 setSaveMsg(t('save_success'));
                 // Parallel revalidation
                 mutate();
@@ -96,6 +130,11 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                     mutate(); // Second revalidation just in case
                     setSaveMsg('');
                 }, 3000);
+            } else if (res.status === 409) {
+                // Someone else saved this exam since we loaded it — never overwrite
+                // silently; make the admin explicitly choose to load the latest copy.
+                setSaveMsg(t('save_conflict'));
+                setSaveConflict(true);
             } else if (res.status === 401) {
                 // Session expired or PIN rejected -> refetch so the login screen shows again
                 setSaveMsg('');
@@ -526,6 +565,11 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                 <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '20px', backgroundColor: 'rgba(15,23,42,0.9)', borderTop: '1px solid #334155', display: 'flex', justifyContent: 'center', gap: '20px', zIndex: 100 }}>
                     <div style={{ maxWidth: '900px', width: '100%', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '20px' }}>
                         {saveMsg && <span style={{ color: (saveMsg.includes('สำเร็จ') || saveMsg.includes('Success')) ? '#4ade80' : (saveMsg.includes('Processing') || saveMsg.includes('ประมวลผล') ? '#60a5fa' : '#f87171') }}>{saveMsg}</span>}
+                        {saveConflict && (
+                            <button onClick={loadLatestFromServer} style={{ padding: '10px 16px', backgroundColor: 'rgba(248,113,113,0.1)', color: '#f87171', border: '1px solid #f87171', borderRadius: '10px', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer' }}>
+                                {locale === 'th' ? 'โหลดข้อมูลล่าสุด' : 'Load latest'}
+                            </button>
+                        )}
                         <button onClick={handleTranslateAll} disabled={saving} style={{ padding: '14px 20px', backgroundColor: 'rgba(96,165,250,0.1)', color: '#60a5fa', border: '1px solid #3b82f6', borderRadius: '12px', fontWeight: 'bold', fontSize: '16px', cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <Languages style={{ width: '20px', height: '20px' }} />
                             {t('translate_all')}

@@ -87,6 +87,16 @@ db.exec(`
     -- This handles the transition from the old single-config system
 `);
 
+// Every poll from every open exam room looks these up by exam_id — without an
+// index each is a full table scan across all exams ever created.
+db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_sessions_exam_id ON sessions(exam_id);
+    CREATE INDEX IF NOT EXISTS idx_announcements_exam_id ON announcements(exam_id);
+    CREATE INDEX IF NOT EXISTS idx_subjects_exam_id ON subjects(exam_id);
+    CREATE INDEX IF NOT EXISTS idx_file_assets_exam_id ON file_assets(exam_id);
+    CREATE INDEX IF NOT EXISTS idx_file_logs_exam_id ON file_logs(exam_id);
+`);
+
 // Initialization: Create a default exam if none exist
 const examCount = (db.prepare('SELECT COUNT(*) as c FROM exams').get() as any).c;
 if (examCount === 0) {
@@ -116,6 +126,9 @@ ensureColumn('subjects', 'exam_id');
 ensureColumn('exams', 'file_sharing_enabled');
 ensureColumn('exams', 'student_pin', 'TEXT', '');
 ensureColumn('exams', 'title_en', 'TEXT', '');
+// Bumped on every successful updateExamConfig — lets a save detect that someone
+// else changed this exam in between, instead of silently overwriting their edit.
+ensureColumn('exams', 'updated_at', 'INTEGER', 0);
 ensureColumn('sessions', 'name_en', 'TEXT', '');
 ensureColumn('announcements', 'content_en', 'TEXT', '');
 ensureColumn('file_assets', 'folder', 'TEXT', '');
@@ -312,6 +325,7 @@ export function getExamById(id: number | string) {
         adminPin: exam.admin_pin,
         accessCode: exam.student_pin || '',
         fileSharingEnabled: !!exam.file_sharing_enabled,
+        updatedAt: exam.updated_at || 0,
         sessions: sessions.map((s: any) => ({
             id: s.id,
             name: s.name,
@@ -369,6 +383,17 @@ export function examExists(id: number | string) {
     return !!row;
 }
 
+// Thrown by updateExamConfig when the caller's expectedUpdatedAt no longer matches —
+// someone else saved this exam in between. Route handlers should map this to 409.
+export class ConfigConflictError extends Error {
+    currentUpdatedAt: number;
+    constructor(currentUpdatedAt: number) {
+        super('Exam config was changed by someone else since it was loaded');
+        this.name = 'ConfigConflictError';
+        this.currentUpdatedAt = currentUpdatedAt;
+    }
+}
+
 export function updateExamConfig(id: number | string, data: any) {
     try {
         const {
@@ -379,26 +404,51 @@ export function updateExamConfig(id: number | string, data: any) {
             studentPin,
             sessions,
             announcements,
-            subjects
+            subjects,
+            expectedUpdatedAt
         } = data;
 
-        // Update main exam data
-        if (examTitle !== undefined) {
-            db.prepare('UPDATE exams SET title = ? WHERE id = ?').run(examTitle, id);
+        // Reject an obviously malformed payload up front, before anything is written —
+        // sessions/announcements/subjects are only ever iterated as arrays below.
+        if (sessions !== undefined && !Array.isArray(sessions)) {
+            throw new Error('sessions must be an array');
         }
-        if (title_en !== undefined) {
-            db.prepare('UPDATE exams SET title_en = ? WHERE id = ?').run(title_en, id);
+        if (announcements !== undefined && !Array.isArray(announcements)) {
+            throw new Error('announcements must be an array');
         }
-        if (adminPin !== undefined) {
-            db.prepare('UPDATE exams SET admin_pin = ? WHERE id = ?').run(adminPin, id);
-        }
-        const resolvedAccessCode = accessCode !== undefined ? accessCode : studentPin;
-        if (resolvedAccessCode !== undefined) {
-            db.prepare('UPDATE exams SET student_pin = ? WHERE id = ?').run(resolvedAccessCode, id);
+        if (subjects !== undefined && !Array.isArray(subjects)) {
+            throw new Error('subjects must be an array');
         }
 
-        // Wrap in transaction for sessions, ann, subjects
+        // Everything below is one all-or-nothing transaction: a save either fully
+        // applies or fully rolls back, so a bad sessions/announcements/subjects entry
+        // can never leave the exam with a new title but stale session times (or vice versa).
         const transaction = db.transaction(() => {
+            // Optimistic concurrency check: if the caller told us what updated_at it
+            // last saw, and the row has moved on since, refuse the whole save rather
+            // than silently overwriting whatever changed it (e.g. a second admin tab).
+            if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null) {
+                const row = db.prepare('SELECT updated_at FROM exams WHERE id = ?').get(id) as any;
+                const currentUpdatedAt = row?.updated_at || 0;
+                if (currentUpdatedAt !== expectedUpdatedAt) {
+                    throw new ConfigConflictError(currentUpdatedAt);
+                }
+            }
+
+            if (examTitle !== undefined) {
+                db.prepare('UPDATE exams SET title = ? WHERE id = ?').run(examTitle, id);
+            }
+            if (title_en !== undefined) {
+                db.prepare('UPDATE exams SET title_en = ? WHERE id = ?').run(title_en, id);
+            }
+            if (adminPin !== undefined) {
+                db.prepare('UPDATE exams SET admin_pin = ? WHERE id = ?').run(adminPin, id);
+            }
+            const resolvedAccessCode = accessCode !== undefined ? accessCode : studentPin;
+            if (resolvedAccessCode !== undefined) {
+                db.prepare('UPDATE exams SET student_pin = ? WHERE id = ?').run(resolvedAccessCode, id);
+            }
+
             // Update sessions
             if (sessions !== undefined) {
                 db.prepare('DELETE FROM sessions WHERE exam_id = ?').run(id);
@@ -427,32 +477,42 @@ export function updateExamConfig(id: number | string, data: any) {
                     insertSubject.run(id, s.subject_id || '', s.name || '', s.folder || '', s.pin || '');
                 });
             }
+
+            if (data.fileSharingEnabled !== undefined) {
+                const enabled = !!data.fileSharingEnabled;
+                db.prepare('UPDATE exams SET file_sharing_enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
+            }
+
+            // Any successful save moves the exam to a new version, so the next
+            // conflict check compares against this moment, not the original load.
+            db.prepare('UPDATE exams SET updated_at = ? WHERE id = ?').run(Date.now(), id);
         });
 
         transaction();
 
-        // 4. File sharing toggle
-        if (data.fileSharingEnabled !== undefined) {
-            const enabled = !!data.fileSharingEnabled;
-            db.prepare('UPDATE exams SET file_sharing_enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
-
-            if (enabled) {
-                try {
-                    const examDir = path.join(process.cwd(), 'data', String(id));
-                    if (!fs.existsSync(examDir)) {
-                        fs.mkdirSync(examDir, { recursive: true });
-                        console.log(`Created directory: ${examDir}`);
-                    }
-                } catch (e) {
-                    console.error(`PERMISSION ERROR: Failed to create directory for exam ${id}. Please check data/ folder permissions.`, e);
-                    // We don't throw here to allow other config updates to succeed
+        // Directory creation is filesystem work, not DB state, so it stays outside the
+        // transaction (nothing to roll back) — but it's only reached once the config
+        // above has actually committed successfully.
+        if (data.fileSharingEnabled) {
+            try {
+                const examDir = path.join(process.cwd(), 'data', String(id));
+                if (!fs.existsSync(examDir)) {
+                    fs.mkdirSync(examDir, { recursive: true });
+                    console.log(`Created directory: ${examDir}`);
                 }
+            } catch (e) {
+                console.error(`PERMISSION ERROR: Failed to create directory for exam ${id}. Please check data/ folder permissions.`, e);
+                // We don't throw here to allow other config updates to succeed
             }
         }
 
         return getExamById(id);
     } catch (error) {
-        console.error('DATABASE ERROR in updateExamConfig:', error);
+        // A save conflict is an expected, routine outcome (not a database fault) —
+        // only log the genuinely unexpected cases.
+        if (!(error instanceof ConfigConflictError)) {
+            console.error('DATABASE ERROR in updateExamConfig:', error);
+        }
         throw error;
     }
 }

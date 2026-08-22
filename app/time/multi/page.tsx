@@ -64,13 +64,16 @@ function ExamMonitorCell({ id }: { id: string }) {
     const [remainRatio, setRemainRatio] = useState(1);
     const [currentTimeStr, setCurrentTimeStr] = useState('');
 
-    // Server/client clock offset (ms)
+    // Server/client clock offset (ms). Polled separately from the exam config (SWR
+    // dedupes this identical key across every open cell into one shared request) and
+    // much less often, since clock drift doesn't change second-to-second.
+    const { data: serverTimeData } = useSWR('/api/server-time', fetcher, { refreshInterval: 30000 });
     const serverOffsetRef = useRef(0);
     useEffect(() => {
-        if (typeof config?.serverTime === 'number') {
-            serverOffsetRef.current = config.serverTime - Date.now();
+        if (typeof serverTimeData?.time === 'number') {
+            serverOffsetRef.current = serverTimeData.time - Date.now();
         }
-    }, [config]);
+    }, [serverTimeData]);
 
     useEffect(() => {
         const calculate = () => {
@@ -89,7 +92,16 @@ function ExamMonitorCell({ id }: { id: string }) {
             });
 
             if (!session) {
-                session = config.sessions.find((s: any) => new Date(s.startTime).getTime() > nowTime);
+                // Pick the session that starts soonest, not just the first one in array
+                // order (sessions aren't guaranteed to be stored chronologically).
+                let soonestStart = Infinity;
+                config.sessions.forEach((s: any) => {
+                    const start = new Date(s.startTime).getTime();
+                    if (start > nowTime && start < soonestStart) {
+                        soonestStart = start;
+                        session = s;
+                    }
+                });
             }
 
             if (!session && config.sessions.length > 0) {
