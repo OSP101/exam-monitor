@@ -605,17 +605,20 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                         {new Date(currentSession.endTime).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                 )}
-                <div style={{ fontSize: '14px', color: '#94a3b8' }}><p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>
-                © {new Date().getFullYear()} CP-KKU | Developed by{' '}
-                <a
-                    href="https://osp101.com/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color:'#60a5fa', textDecoration: 'underline' }}
-                >
-                    ITII Development Team
-                </a>
-            </p></div>
+                <div style={{ fontSize: '14px', color: '#94a3b8' }}>
+                    <p style={{ margin: 0, fontSize: '18px', color: '#94a3b8' }}>
+
+                        © {new Date().getFullYear()} CP-KKU | Developed by{' '}
+                        <a
+                            href="https://osp101.com/"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: '#60a5fa', textDecoration: 'underline' }}
+                        >
+                            ITII Development Team
+                        </a>
+                    </p>
+                </div>
             </footer>
 
             {soundModalOpen && soundDraft && (
