@@ -130,9 +130,15 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
         }));
     };
 
+    // Whether this projector/computer has ever saved sound settings for this exam —
+    // null until the localStorage read below resolves, so the auto-open effect can't
+    // fire on a false negative before we've actually checked.
+    const [hasSavedSoundConfig, setHasSavedSoundConfig] = useState<boolean | null>(null);
+
     useEffect(() => {
         try {
             const raw = localStorage.getItem(`examSound:${id}`);
+            setHasSavedSoundConfig(!!raw);
             if (raw) {
                 const parsed = JSON.parse(raw);
                 setSoundSettings({
@@ -142,13 +148,29 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
                     events: { ...DEFAULT_SOUND_SETTINGS.events, ...parsed.events },
                 });
             }
-        } catch { /* ignore malformed/inaccessible storage */ }
+        } catch {
+            // Storage unreadable (private mode, disabled, etc.) — treat as "already
+            // configured" so we don't nag with a modal we also can't persist a choice from.
+            setHasSavedSoundConfig(true);
+        }
     }, [id]);
 
     const openSoundModal = () => {
         setSoundDraft({ ...soundSettings, alerts: { ...soundSettings.alerts }, events: { ...soundSettings.events } });
         setSoundModalOpen(true);
     };
+
+    // First time this projector opens this exam (no saved sound config yet), pop the
+    // settings modal open on its own once unlocked — otherwise nobody notices there's
+    // a sound alert feature until they happen to click the bell icon.
+    const autoOpenedSoundModalRef = useRef(false);
+    useEffect(() => {
+        if (!isLocked && hasSavedSoundConfig === false && !autoOpenedSoundModalRef.current) {
+            autoOpenedSoundModalRef.current = true;
+            openSoundModal();
+        }
+    }, [isLocked, hasSavedSoundConfig]);
+
     const closeSoundModal = () => {
         setSoundModalOpen(false);
         setSoundDraft(null);
