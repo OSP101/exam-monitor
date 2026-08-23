@@ -35,7 +35,7 @@ const colorFromRatio = (ratio: number) => {
 };
 
 // Sound alert settings
-type AlertKey = 'hr1' | 'min30' | 'min10' | 'min5';
+type AlertKey = 'hr1' | 'min30' | 'min10' | 'min5' | 'min1';
 type EventKey = 'start' | 'timeout';
 interface SoundSettings {
     enabled: boolean;
@@ -48,6 +48,7 @@ const ALERT_DEFS: { key: AlertKey; minutes: number; file: string; label: string;
     { key: 'min30', minutes: 30, file: '/sound/30min-1.mp3', label: 'เหลือ 30 นาที', label_en: '30 minutes left' },
     { key: 'min10', minutes: 10, file: '/sound/10min-1.mp3', label: 'เหลือ 10 นาที', label_en: '10 minutes left' },
     { key: 'min5', minutes: 5, file: '/sound/5min-1.mp3', label: 'เหลือ 5 นาที', label_en: '5 minutes left' },
+    { key: 'min1', minutes: 1, file: '/sound/1min-1.mp3', label: 'เหลือ 1 นาที', label_en: '1 minute left' },
 ];
 const EVENT_DEFS: { key: EventKey; file: string; label: string; label_en: string }[] = [
     { key: 'start', file: '/sound/startexam-1.mp3', label: 'เริ่มสอบ', label_en: 'Exam starts' },
@@ -60,7 +61,7 @@ const TEST_SOUND_FILE = '/sound/test-1.mp3';
 const DEFAULT_SOUND_SETTINGS: SoundSettings = {
     enabled: false,
     tested: false,
-    alerts: { hr1: false, min30: false, min10: false, min5: false },
+    alerts: { hr1: false, min30: false, min10: false, min5: false, min1: false },
     events: { start: false, timeout: false },
 };
 
