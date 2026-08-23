@@ -215,11 +215,15 @@ export default function TimePage({ params }: { params: Promise<{ id: string }> }
 
     const currentSession = config?.sessions?.[currentSessionIndex];
 
-    // Identity of the displayed session (its own db id, falling back to a start+end
-    // composite) — NOT the array index, which can be reused by a different session
-    // after one earlier in the list is deleted. Resetting fired alerts/events by index
-    // alone would let a new session silently inherit another session's already-fired flags.
-    const currentSessionKey = currentSession ? String(currentSession.id ?? `${currentSession.startTime}|${currentSession.endTime}`) : null;
+    // Identity of the displayed session, keyed by its start+end time — NOT the db id
+    // (every save re-inserts all sessions with fresh autoincrement ids, see
+    // updateExamConfig in lib/db.ts, so an id-based key would churn on every save,
+    // even an unrelated one like editing an announcement) and NOT the array index
+    // (reused by a different session after one earlier in the list is deleted).
+    // Resetting fired alerts/events by index or db id alone would either let a new
+    // session inherit another session's fired flags, or replay already-fired sounds
+    // on every save.
+    const currentSessionKey = currentSession ? `${currentSession.startTime}|${currentSession.endTime}` : null;
     useEffect(() => {
         firedAlertsRef.current = new Set();
         firedEventsRef.current = new Set();

@@ -12,6 +12,10 @@ import Footer from '@/components/Footer';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
+// More than this crowds out the clock on the /time display, which is the whole
+// point of that screen — see updateExamConfig's server-side cap in lib/db.ts.
+const MAX_ANNOUNCEMENTS = 7;
+
 export default function ExamAdminPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
     const { data: exam, mutate } = useSWR(`/api/exams/${id}`, fetcher);
@@ -227,6 +231,7 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
     };
 
     const addAnnouncement = () => {
+        if (formData.announcements.length >= MAX_ANNOUNCEMENTS) return;
         setFormData({ ...formData, announcements: [...formData.announcements, { content: "", content_en: "" }] });
     };
 
@@ -466,8 +471,20 @@ export default function ExamAdminPage({ params }: { params: Promise<{ id: string
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
                         <h3 style={{ fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <Megaphone style={{ width: '18px', height: '18px', color: '#4ade80' }} /> {t('announcements')}
+                            <span style={{ fontSize: '13px', fontWeight: 400, color: '#64748b' }}>({formData.announcements.length}/{MAX_ANNOUNCEMENTS})</span>
                         </h3>
-                        <button onClick={addAnnouncement} style={{ padding: '6px 12px', backgroundColor: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid #22c55e', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>
+                        <button
+                            onClick={addAnnouncement}
+                            disabled={formData.announcements.length >= MAX_ANNOUNCEMENTS}
+                            title={formData.announcements.length >= MAX_ANNOUNCEMENTS ? (locale === 'th' ? `เพิ่มได้สูงสุด ${MAX_ANNOUNCEMENTS} ข้อ` : `Up to ${MAX_ANNOUNCEMENTS} announcements`) : undefined}
+                            style={{
+                                padding: '6px 12px', borderRadius: '6px', fontSize: '13px',
+                                backgroundColor: formData.announcements.length >= MAX_ANNOUNCEMENTS ? 'rgba(100,116,139,0.1)' : 'rgba(74,222,128,0.1)',
+                                color: formData.announcements.length >= MAX_ANNOUNCEMENTS ? '#64748b' : '#4ade80',
+                                border: `1px solid ${formData.announcements.length >= MAX_ANNOUNCEMENTS ? '#475569' : '#22c55e'}`,
+                                cursor: formData.announcements.length >= MAX_ANNOUNCEMENTS ? 'not-allowed' : 'pointer',
+                            }}
+                        >
                             + {t('add_announcement')}
                         </button>
                     </div>

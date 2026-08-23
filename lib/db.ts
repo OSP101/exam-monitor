@@ -416,6 +416,11 @@ export function updateExamConfig(id: number | string, data: any) {
         if (announcements !== undefined && !Array.isArray(announcements)) {
             throw new Error('announcements must be an array');
         }
+        // Kept in sync with MAX_ANNOUNCEMENTS in app/admin/[id]/page.tsx — more than
+        // this crowds out the clock on the /time display.
+        if (Array.isArray(announcements) && announcements.length > 7) {
+            throw new Error('Too many announcements (max 7)');
+        }
         if (subjects !== undefined && !Array.isArray(subjects)) {
             throw new Error('subjects must be an array');
         }
